@@ -573,14 +573,26 @@ const App: React.FC = () => {
     // 4. HACİM
     const hasVolumeSpike = candidateData.largeOrderCount >= 3;
     
-    // 5. CONTEXT
+    // 5. CONTEXT - TREND DIRECTION CHECK (🔧 FIXED!)
     let contextOK = true;
     if (candles.length >= 15) {
       const sma7 = candles.slice(-7).reduce((sum, c) => sum + c.close, 0) / 7;
       const sma15 = candles.slice(-15).reduce((sum, c) => sum + c.close, 0) / 15;
       
-      if (isBullish && sma7 < sma15 * 0.98) contextOK = false;
-      if (!isBullish && sma7 > sma15 * 1.02) contextOK = false;
+      // Trend strength
+      const trendStrength = ((sma7 - sma15) / sma15) * 100;
+      
+      // 🔧 FIX: Kuvvetli ters trend kontrolü
+      if (isBullish && trendStrength < -5) {
+        // LONG ama kuvvetli downtrend (%5+)
+        console.warn(`[TrendCheck] ⚠️ LONG signal rejected: Strong downtrend (SMA7 ${trendStrength.toFixed(2)}% below SMA15)`);
+        contextOK = false;
+      }
+      if (!isBullish && trendStrength > 5) {
+        // SHORT ama kuvvetli uptrend (%5+)
+        console.warn(`[TrendCheck] ⚠️ SHORT signal rejected: Strong uptrend (SMA7 ${trendStrength.toFixed(2)}% above SMA15)`);
+        contextOK = false;
+      }
     }
 
     const conditions = [isBreakout, trendConfirmed, hasVolumeSpike, contextOK];

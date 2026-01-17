@@ -23,6 +23,7 @@ interface GroupedTrade {
   timestamp: number;
   closedAt: number;
   source: 'AUTO' | 'MANUAL';
+  alertType?: string;  // 🔧 YENİ: Alert type
 }
 
 const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, marketData, onSelectSymbol }) => {
@@ -76,7 +77,8 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
           partials: [],
           timestamp: item.timestamp,
           closedAt: item.closedAt,
-          source: item.source
+          source: item.source,
+          alertType: item.alertType  // 🔧 YENİ: Alert type
         };
       }
       
@@ -280,6 +282,14 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                         }`}>
                           {pos.source}
                         </span>
+                        {pos.alertType && (
+                          <span className="text-[7px] font-black px-1 py-0.25 rounded text-center bg-[#fcd535]/10 text-[#fcd535] border border-[#fcd535]/20 leading-none">
+                            {pos.alertType === 'WHALE_ACCUMULATION' && '🐋 WHALE'}
+                            {pos.alertType === 'INSTITUTION_ENTRY' && '🏛️ INST'}
+                            {pos.alertType === 'TREND_START' && '🚀 TREND'}
+                            {pos.alertType === 'PUMP_START' && '🔥 PUMP'}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
