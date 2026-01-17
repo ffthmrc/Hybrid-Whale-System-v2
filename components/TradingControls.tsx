@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { StrategyConfig, AccountState, Position, Side, SymbolData } from '../types';
 
@@ -17,6 +16,7 @@ const TradingControls: React.FC<Props> = ({ config, setConfig, account, marketDa
   const [isManualExpanded, setIsManualExpanded] = useState(false);
   const [manualSymbol, setManualSymbol] = useState('');
   const [manualSide, setManualSide] = useState<Side>('LONG');
+  const [newBlacklistSymbol, setNewBlacklistSymbol] = useState('');  // 🔧 YENİ
 
   const handleChange = (key: keyof StrategyConfig, value: any) => {
     setConfig(prev => ({ ...prev, [key]: value }));
@@ -288,6 +288,67 @@ const TradingControls: React.FC<Props> = ({ config, setConfig, account, marketDa
               </button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* 🔧 YENİ: BLACKLIST YÖNETİMİ */}
+      <div className="space-y-2 bg-[#1e2329]/50 p-3 rounded-lg border border-[#2b3139]">
+        <div className="text-[9px] font-black text-[#fcd535] uppercase tracking-widest border-b border-[#2b3139] pb-2">
+          Blacklist ({config.blacklist.length})
+        </div>
+        
+        {/* Blacklist Items */}
+        <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+          {config.blacklist.length === 0 ? (
+            <div className="text-center py-2 text-[#848e9c] text-[9px] font-bold opacity-50">
+              No blacklisted coins
+            </div>
+          ) : (
+            config.blacklist.map(symbol => (
+              <div key={symbol} className="flex items-center justify-between bg-[#0b0e11] px-2 py-1.5 rounded border border-[#2b3139] hover:border-[#f84960]/50 transition-all group">
+                <span className="text-[10px] font-black text-white uppercase">{symbol}</span>
+                <button
+                  onClick={() => handleChange('blacklist', config.blacklist.filter(s => s !== symbol))}
+                  className="text-[#848e9c] hover:text-[#f84960] text-[11px] font-black opacity-0 group-hover:opacity-100 transition-all"
+                  title="Remove from blacklist"
+                >
+                  ✕
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+        
+        {/* Add New */}
+        <div className="flex gap-2 pt-1">
+          <input
+            type="text"
+            placeholder="SYMBOL (e.g. DOGE)"
+            value={newBlacklistSymbol}
+            onChange={(e) => setNewBlacklistSymbol(e.target.value.toUpperCase().replace('USDT', ''))}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' && newBlacklistSymbol && !config.blacklist.includes(newBlacklistSymbol)) {
+                handleChange('blacklist', [...config.blacklist, newBlacklistSymbol]);
+                setNewBlacklistSymbol('');
+              }
+            }}
+            className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1.5 text-[10px] font-black text-white uppercase outline-none focus:border-[#fcd535] transition-all"
+          />
+          <button
+            onClick={() => {
+              if (newBlacklistSymbol && !config.blacklist.includes(newBlacklistSymbol)) {
+                handleChange('blacklist', [...config.blacklist, newBlacklistSymbol]);
+                setNewBlacklistSymbol('');
+              }
+            }}
+            className="bg-[#fcd535] text-black px-3 py-1.5 rounded text-[10px] font-black hover:bg-white transition-all shadow-md active:scale-95"
+          >
+            ADD
+          </button>
+        </div>
+        
+        <div className="text-[7px] text-[#848e9c] font-bold uppercase bg-black/20 rounded px-2 py-1 mt-1">
+          ⚠️ Blacklisted coins will be ignored for all signals
         </div>
       </div>
 

@@ -518,3 +518,36 @@ export function createKlineStream(symbol: string, interval: string = '1m'): WebS
 
   return ws;
 }
+
+/**
+ * 🔧 PHASE 2: 24h Ticker Stats - Manipulation detection için
+ */
+export async function fetch24hStats(symbol: string): Promise<{
+  symbol: string;
+  priceChangePercent: number;
+  volume: number;
+  quoteVolume: number;
+  high: number;
+  low: number;
+  count: number;
+} | null> {
+  const FUTURES_API = "/binance-futures";
+  try {
+    const url = `${FUTURES_API}/fapi/v1/ticker/24hr?symbol=${symbol}`;
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    return {
+      symbol: data.symbol,
+      priceChangePercent: parseFloat(data.priceChangePercent),
+      volume: parseFloat(data.volume),
+      quoteVolume: parseFloat(data.quoteVolume),
+      high: parseFloat(data.highPrice),
+      low: parseFloat(data.lowPrice),
+      count: parseInt(data.count)
+    };
+  } catch (error) {
+    console.error(`[API] ❌ Failed to fetch 24h stats for ${symbol}:`, error);
+    return null;
+  }
+}

@@ -14,21 +14,43 @@ export const SYSTEM_CONFIG = {
   // PUMP TESPİT KRİTERLERİ
   // ==========================================
   PUMP: {
-    PRICE_CHANGE_MIN: 1.0,      // Minimum fiyat değişimi % (önceki: 0.7, önerilen: 1.0-1.5)
-    VOLUME_RATIO_MIN: 2.0,      // Minimum hacim artışı (önceki: 1.8, önerilen: 2.0-2.5)
-    VOLUME_RATIO_5M_AVG: 1.8,   // 5 dakikalık ortalamaya göre hacim (önceki: 1.6)
-    VOLUME_RATIO_10M_AVG: 2.2,  // 10 dakikalık ortalamaya göre hacim (önceki: 2.0)
-    COOLDOWN_MS: 180000,        // Aynı coin için tekrar pump alert süresi (3 dakika = 180000ms)
+    PRICE_CHANGE_MIN: 1.2,      // Minimum fiyat değişimi % (önerilen: 1.2-1.5)
+    VOLUME_RATIO_MIN: 2.5,      // Minimum hacim artışı (önerilen: 2.5-3.0)
+    VOLUME_RATIO_5M_AVG: 2.2,   // 5 dakikalık ortalamaya göre hacim
+    VOLUME_RATIO_10M_AVG: 2.5,  // 10 dakikalık ortalamaya göre hacim
+    COOLDOWN_MS: 300000,        // Aynı coin için tekrar pump alert süresi (5 dakika)
   },
   
   // ==========================================
   // TREND START KRİTERLERİ
   // ==========================================
   TREND: {
-    MIN_CANDLES: 10,            // Minimum mum sayısı (önceki: 10, önerilen: 15-20)
-    CONSOLIDATION_MAX: 1.5,     // Konsolidasyon aralığı % (önceki: 2.0, önerilen: 1.0-1.5)
-    BREAKOUT_MIN: 1.0,          // Minimum breakout % (önceki: 0.8, önerilen: 1.0-1.5)
+    MIN_CANDLES: 15,            // Minimum mum sayısı (daha güvenilir)
+    CONSOLIDATION_MAX: 1.2,     // Konsolidasyon aralığı % (daha sıkı)
+    BREAKOUT_MIN: 1.2,          // Minimum breakout % (daha güçlü)
     TREND_CONFIRM_CANDLES: 2,   // Trend teyit için mum sayısı
+  },
+  
+  // ==========================================
+  // WHALE TESPİT AYARLARI (DÜZELTİLDİ!)
+  // ==========================================
+  WHALE: {
+    // 🔧 YENİ: Threshold'lar ayrıldı ve artırıldı
+    MIN_SCORE_WHALE: 75,             // WHALE_ACCUMULATION için min (artırıldı)
+    MIN_SCORE_INST: 65,              // INSTITUTION_ENTRY için min (artırıldı)
+    MIN_SCORE_TREND: 50,             // TREND_START için min (whale ile)
+    LARGE_TRADE_MULTIPLIER: 5,       // Ortalama trade'in kaç katı "büyük" sayılır
+    ORDER_IMBALANCE_THRESHOLD: 2.0,  // Bid/Ask imbalance eşiği
+  },
+  
+  // ==========================================
+  // MANİPÜLASYON TESPİTİ (YENİ!)
+  // ==========================================
+  MANIPULATION: {
+    MIN_24H_VOLUME: 1000000,         // 🔧 $1M (önceki: $5M) - Daha düşük volume OK
+    MAX_VOLATILITY_RANGE: 50,        // %50 max - Çok yüksek volatility bile OK
+    MAX_PUMP_FREQUENCY: 10,          // 10/saat - Daha toleranslı
+    ENABLE_AUTO_BLACKLIST: false,    // KAPALI - Manuel kontrol
   },
   
   // ==========================================
@@ -45,10 +67,10 @@ export const SYSTEM_CONFIG = {
     
     // INSTITUTIONAL
     INSTITUTIONAL_VOLUME_RATIO: 1.8, // (önceki: 1.4)
-    INSTITUTIONAL_PRICE_CHANGE: 0.9, // % (önceki: 0.4)
+    INSTITUTIONAL_PRICE_CHANGE: 0.6, // % (önceki: 0.4)
     
     // BASIC MOMENTUM
-    BASIC_PRICE_CHANGE: 1.0,        // % (önceki: 0.6)
+    BASIC_PRICE_CHANGE: 0.8,        // % (önceki: 0.6)
     BASIC_VOLUME_RATIO: 1.3,        // (önceki: 1.1)
   },
   
@@ -76,15 +98,6 @@ export const SYSTEM_CONFIG = {
   },
   
   // ==========================================
-  // WHALE TESPİT AYARLARI
-  // ==========================================
-  WHALE: {
-    LARGE_TRADE_MULTIPLIER: 5,   // Ortalama trade'in kaç katı "büyük" sayılır
-    ORDER_IMBALANCE_THRESHOLD: 2.0, // Bid/Ask imbalance eşiği
-    MIN_WHALE_SCORE: 60
-  },
-  
-  // ==========================================
   // FEE VE TRADE AYARLARI
   // ==========================================
   TRADING: {
@@ -100,39 +113,57 @@ export const DEFAULT_STRATEGY_CONFIG = {
   autoTrading: true,
   eliteMode: true,
   pumpDetectionEnabled: true,
+  whaleDetectionEnabled: true,
   longEnabled: true,
-  shortEnabled: true,
-  leverage: 20,
-  riskPerTrade: 1.0,          // %
-  priceChangeThreshold: 1.0,   // %
-  stopLossPercent: 2.0,        // %
-  tp1Percent: 1.0,             // %
-  tp2Percent: 3.0,             // %
+  shortEnabled: false,         // İlk test sadece LONG
+  leverage: 15,
+  riskPerTrade: 1.0,
+  priceChangeThreshold: 1.0,
+  stopLossPercent: 2.0,
+  tp1Percent: 1.5,
+  tp2Percent: 4.0,
   cooldownMinutes: 5,
-  maxConcurrentTrades: 20,
-  blacklist: ['FLOW', 'FOGO', 'CELO'],
+  maxConcurrentTrades: 10,
+  blacklist: ['FLOW', 'FOGO', 'BOME', 'CELO'],  // 🔧 CELO eklendi
+  whaleMinScore: 75,           // 🔧 60'tan 75'e çıkarıldı
+  useDynamicStopLoss: true,
+  ringEnabled: true,
 };
 
 // ==========================================
 // AÇIKLAMALAR
 // ==========================================
 /*
-PUMP TESPİTİ:
-- PRICE_CHANGE_MIN: Ne kadar yüksekse o kadar az pump alert gelir
-- VOLUME_RATIO_MIN: Ne kadar yüksekse o kadar az pump alert gelir
-- COOLDOWN_MS: Ne kadar yüksekse aynı coin için daha az tekrarlı alert
+🔧 YENİ DEĞİŞİKLİKLER:
 
-TREND TESPİTİ:
-- MIN_CANDLES: Düşükse daha erken sinyal, yüksekse daha güvenilir
-- CONSOLIDATION_MAX: Düşükse daha sıkı konsolidasyon gerekir
-- BREAKOUT_MIN: Yüksekse daha güçlü breakout gerekir
+1. WHALE THRESHOLD'LARI AYRILDI:
+   - MIN_SCORE_WHALE: 75 (sadece en güçlü sinyaller)
+   - MIN_SCORE_INST: 65 (orta güçlü)
+   - MIN_SCORE_TREND: 50 (trend + whale)
 
-MOMENTUM:
-- Volume ratio yüksekse = daha az ama daha kaliteli sinyal
-- Price change yüksekse = daha az ama daha belirgin hareketler
+2. MANİPÜLASYON TESPİTİ EKLENDİ:
+   - Düşük volume coinleri engelle
+   - Aşırı volatilite kontrolü
+   - Pump frequency limiti
+   - Otomatik blacklist
 
-ÖNERİLEN BAŞLANGIÇ DEĞERLERİ:
-- Çok sinyal istiyorsan: Düşük değerler
-- Kaliteli sinyal istiyorsan: Yüksek değerler
-- Test için: Orta değerler (şu anki ayarlar)
+3. PUMP KRİTERLERİ SIKLAŞTIRILDI:
+   - PRICE_CHANGE_MIN: 1.0 → 1.2
+   - VOLUME_RATIO_MIN: 2.0 → 2.5
+   - COOLDOWN: 3 dakika → 5 dakika
+
+4. TREND KRİTERLERİ SIKLAŞTIRILDI:
+   - MIN_CANDLES: 10 → 15
+   - CONSOLIDATION_MAX: 1.5 → 1.2
+   - BREAKOUT_MIN: 1.0 → 1.2
+
+5. BLACKLIST:
+   - CELO eklendi (manipülasyon riski)
+   - UI'dan eklenebilir/çıkarılabilir
+
+BEKLENEN SONUÇLAR:
+- Daha az ama daha kaliteli sinyaller
+- False positive oranı düşecek
+- WHALE alert'leri daha güvenilir
+- Manipüle coinler engellenecek
 */

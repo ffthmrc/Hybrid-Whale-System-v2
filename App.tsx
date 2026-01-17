@@ -6,7 +6,7 @@ import TradingChart from './components/TradingChart';
 import TradingControls from './components/TradingControls';
 import AlertsPanel from './components/AlertsPanel';
 import PositionsPanel from './components/PositionsPanel';
-import { fetchAllData } from './utils/api';
+import { fetchAllData, fetch24hStats } from './utils/api';
 import { SYSTEM_CONFIG } from './config';
 
 const FEE_RATE = SYSTEM_CONFIG.TRADING.FEE_RATE;
@@ -18,6 +18,8 @@ interface PumpTracker {
   lastPumpAlert: number;
   minuteStartVolume: number;
   currentMinute: number;
+  pumpCount: number;           // 🔧 YENİ: Saatteki pump sayısı
+  lastPumpHour: number;        // 🔧 YENİ: Son pump saati
 }
 
 interface MinuteTick {
@@ -139,6 +141,70 @@ const App: React.FC = () => {
     return Math.min(100, Math.round(score));
   }, []);
 
+  // 🔧 PHASE 2: MANİPÜLASYON TESPİTİ
+  const checkManipulationRisk = useCallback(async (symbol: string): Promise<{
+    isRisky: boolean;
+    reason?: string;
+    shouldBlacklist?: boolean;
+  }> => {
+    try {
+      // 1. 24h stats çek
+      const stats = await fetch24hStats(symbol);
+      if (!stats) {
+        return { isRisky: false };
+      }
+
+      // 2. Volume kontrolü
+      if (stats.quoteVolume < SYSTEM_CONFIG.MANIPULATION.MIN_24H_VOLUME) {
+        console.warn(`[Manipulation] ⚠️ ${symbol} - Low volume: $${(stats.quoteVolume / 1000000).toFixed(2)}M`);
+        return {
+          isRisky: true,
+          reason: `Low 24h volume ($${(stats.quoteVolume / 1000000).toFixed(2)}M < $5M)`,
+          shouldBlacklist: true
+        };
+      }
+
+      // 3. Volatility range kontrolü
+      const range = ((stats.high - stats.low) / stats.low) * 100;
+      if (range > SYSTEM_CONFIG.MANIPULATION.MAX_VOLATILITY_RANGE) {
+        console.warn(`[Manipulation] ⚠️ ${symbol} - Extreme volatility: ${range.toFixed(2)}%`);
+        return {
+          isRisky: true,
+          reason: `Extreme volatility (${range.toFixed(1)}% > 10%)`,
+          shouldBlacklist: true
+        };
+      }
+
+      // 4. Pump frequency kontrolü
+      const tracker = pumpTrackerRef.current[symbol];
+      if (tracker) {
+        const currentHour = Math.floor(Date.now() / 3600000);
+        
+        // Saat değişti mi?
+        if (tracker.lastPumpHour !== currentHour) {
+          tracker.pumpCount = 0;
+          tracker.lastPumpHour = currentHour;
+        }
+        
+        if (tracker.pumpCount >= SYSTEM_CONFIG.MANIPULATION.MAX_PUMP_FREQUENCY) {
+          console.warn(`[Manipulation] ⚠️ ${symbol} - Too many pumps: ${tracker.pumpCount}/hour`);
+          return {
+            isRisky: true,
+            reason: `Excessive pump frequency (${tracker.pumpCount} pumps/hour)`,
+            shouldBlacklist: false // Geçici engel, blacklist'e ekleme
+          };
+        }
+      }
+
+      // Tüm kontroller OK
+      return { isRisky: false };
+      
+    } catch (error) {
+      console.error(`[Manipulation] ❌ Error checking ${symbol}:`, error);
+      return { isRisky: false };
+    }
+  }, []);
+
   const fetchCandidateData = useCallback(async (symbol: string): Promise<CandidateData | null> => {
     if (fetchingSymbolsRef.current.has(symbol)) return null;
     
@@ -217,11 +283,14 @@ const App: React.FC = () => {
     const currentMinute = Math.floor(now / 60000);
     
     if (!pumpTrackerRef.current[symbol]) {
+      const currentHour = Math.floor(now / 3600000);
       pumpTrackerRef.current[symbol] = {
         minuteVolumes: [],
         lastPumpAlert: 0,
         minuteStartVolume: 0,
-        currentMinute
+        currentMinute,
+        pumpCount: 0,            // 🔧 PHASE 2
+        lastPumpHour: currentHour // 🔧 PHASE 2
       };
     }
     
@@ -267,7 +336,16 @@ const App: React.FC = () => {
     
     if (isPump) {
       tracker.lastPumpAlert = now;
-      console.log(`[PUMP] 🔥 ${symbol}: price=${priceChangePct.toFixed(2)}%, volume=${volumeRatio.toFixed(2)}x`);
+      
+      // 🔧 PHASE 2: Pump count artır
+      const currentHour = Math.floor(now / 3600000);
+      if (tracker.lastPumpHour !== currentHour) {
+        tracker.pumpCount = 0;
+        tracker.lastPumpHour = currentHour;
+      }
+      tracker.pumpCount++;
+      
+      console.log(`[PUMP] 🔥 ${symbol}: price=${priceChangePct.toFixed(2)}%, volume=${volumeRatio.toFixed(2)}x (${tracker.pumpCount}/hour)`);
     }
     
     return { isPump, volumeRatio };
@@ -363,6 +441,14 @@ const App: React.FC = () => {
     try {
       console.log(`[ANALYSIS] 🔍 Analyzing ${symbol}...`);
       
+      // 🔧 PHASE 2: Manipulation check (sadece WARNING)
+      const manipulationCheck = await checkManipulationRisk(symbol);
+      if (manipulationCheck.isRisky) {
+        console.warn(`[ANALYSIS] ⚠️ ${symbol} - Manipulation warning: ${manipulationCheck.reason}`);
+        // ⚠️ Sadece uyarı ver, alert'i engelleme!
+        // İstersen manuel blacklist ekleyebilirsin
+      }
+      
       // 1. Detaylı veri çek
       const candidateData = await fetchCandidateData(symbol);
       if (!candidateData) {
@@ -383,15 +469,16 @@ const App: React.FC = () => {
       let reason: string;
       let autoTrade: boolean;
       
-      if (whaleScore >= config.whaleMinScore) {
+      // 🔧 FIX: Config'ten threshold'ları al (hardcoded değil!)
+      if (whaleScore >= SYSTEM_CONFIG.WHALE.MIN_SCORE_WHALE) {
         eliteType = 'WHALE_ACCUMULATION';
         reason = '🐋 WHALE ACCUMULATION';
         autoTrade = config.whaleDetectionEnabled;
-      } else if (whaleScore >= 60) {
+      } else if (whaleScore >= SYSTEM_CONFIG.WHALE.MIN_SCORE_INST) {
         eliteType = 'INSTITUTION_ENTRY';
         reason = '🏛️ INSTITUTIONAL ENTRY';
         autoTrade = config.whaleDetectionEnabled;
-      } else if (trendCheck.isTrendStart && whaleScore >= 50) {
+      } else if (trendCheck.isTrendStart && whaleScore >= SYSTEM_CONFIG.WHALE.MIN_SCORE_TREND) {
         eliteType = 'TREND_START';
         reason = '🚀 TREND START';
         autoTrade = true;
@@ -401,13 +488,22 @@ const App: React.FC = () => {
         autoTrade = false; // Manuel onay gerekli
       }
       
-      console.log(`[ANALYSIS] ✅ ${symbol} → ${eliteType} (autoTrade: ${autoTrade})`);
+      console.log(`[ANALYSIS] ✅ ${symbol} → ${eliteType} (autoTrade: ${autoTrade}, score: ${whaleScore})`);
+      
+      // 🔧 FIX: UI direction check (alert oluşturmadan önce!)
+      const alertSide: Side = candleChangePct > 0 ? 'LONG' : 'SHORT';
+      const isDirectionAllowed = alertSide === 'LONG' ? config.longEnabled : config.shortEnabled;
+      
+      if (!isDirectionAllowed) {
+        console.log(`[ANALYSIS] ⚠️ ${symbol} - ${alertSide} direction disabled in UI, skipping alert`);
+        return null;
+      }
       
       // 5. Alert oluştur
       const alert: TradingAlert = {
         id: `${eliteType?.toLowerCase()}-${symbol}-${timestamp}`,
         symbol,
-        side: candleChangePct > 0 ? 'LONG' : 'SHORT',
+        side: alertSide,
         reason,
         change: candleChangePct,
         price,
@@ -444,7 +540,7 @@ const App: React.FC = () => {
       console.error(`[ANALYSIS] ❌ ${symbol} analysis failed:`, error);
       return null;
     }
-  }, [fetchCandidateData, calculateWhaleScore, config.whaleDetectionEnabled]);
+  }, [fetchCandidateData, calculateWhaleScore, config.whaleDetectionEnabled, config.longEnabled, config.shortEnabled]);
 
   // 🔧 TREND ANALYSIS (Candidate data ile)
   const checkTrendStartWithData = useCallback((
@@ -698,6 +794,24 @@ const App: React.FC = () => {
     const closingFee = (pos.quantity * currentPrice) * FEE_RATE;
     const finalPnl = pnlAtExit - closingFee;
     
+    // 🔧 DEBUG LOG
+    const remainingMargin = pos.margin * (pos.quantity / pos.initialQuantity);
+    const netChange = remainingMargin + finalPnl;
+    console.log(`[CloseTrade] 💰 ${pos.symbol} ${reason}:`, {
+      side: pos.side,
+      entry: pos.entryPrice.toFixed(6),
+      exit: currentPrice.toFixed(6),
+      priceDiff: priceDiff.toFixed(6),
+      quantity: pos.quantity.toFixed(4),
+      pnlBeforeFee: pnlAtExit.toFixed(2),
+      closingFee: closingFee.toFixed(2),
+      finalPnl: finalPnl.toFixed(2),
+      remainingMargin: remainingMargin.toFixed(2),
+      netBalanceChange: netChange.toFixed(2),
+      currentBalance: account.balance.toFixed(2),
+      newBalance: (account.balance + netChange).toFixed(2)
+    });
+    
     const historyItem: TradeHistoryItem = {
       id: pos.id, symbol: pos.symbol, side: pos.side, leverage: pos.leverage, quantity: pos.quantity,
       entryPrice: pos.entryPrice, exitPrice: currentPrice, stopLoss: pos.stopLoss, tp1: pos.tp1, tp2: pos.tp2,
@@ -711,7 +825,8 @@ const App: React.FC = () => {
       minPriceDuringTrade: pos.minPrice, 
       maxPriceDuringTrade: pos.maxPrice,
       initialMargin: pos.margin, 
-      source: pos.source
+      source: pos.source,
+      alertType: pos.alertType  // 🔧 Alert type'ı ekle
     };
     
     return { 
@@ -889,8 +1004,16 @@ const App: React.FC = () => {
     let addedAny = false;
     
     for (const alert of unProcessedAlerts) {
-      if (tempPositions.length >= config.maxConcurrentTrades) break;
+      // 🔧 DEBUG LOG
+      console.log(`[AutoTrade] 🔍 Checking ${alert.symbol} (${alert.eliteType})...`);
+      
+      if (tempPositions.length >= config.maxConcurrentTrades) {
+        console.log(`[AutoTrade] ⚠️ ${alert.symbol} - Max trades reached (${config.maxConcurrentTrades})`);
+        break;
+      }
+      
       if (tempPositions.some(p => p.symbol === alert.symbol)) { 
+        console.log(`[AutoTrade] ⚠️ ${alert.symbol} - Position already exists`);
         processedAlertIds.current.add(alert.id); 
         continue; 
       }
@@ -898,6 +1021,16 @@ const App: React.FC = () => {
       const isDirectionEnabled = alert.side === 'LONG' ? config.longEnabled : config.shortEnabled;
       const isEliteCheckPassed = config.eliteMode ? alert.isElite : true;
       const isAutoTradeAlert = alert.autoTrade !== false;
+
+      // 🔧 DEBUG LOG
+      console.log(`[AutoTrade] 📊 ${alert.symbol} checks:`, {
+        direction: isDirectionEnabled ? '✅' : '❌',
+        elite: isEliteCheckPassed ? '✅' : '❌',
+        autoTrade: isAutoTradeAlert ? '✅' : '❌',
+        side: alert.side,
+        isElite: alert.isElite,
+        autoTradeFlag: alert.autoTrade
+      });
 
       if (isDirectionEnabled && isEliteCheckPassed && isAutoTradeAlert) {
         processedAlertIds.current.add(alert.id);
@@ -955,10 +1088,26 @@ const App: React.FC = () => {
             resistanceLevel: alert.resistanceLevel
           };
           
+          // 🔧 DEBUG LOG
+          console.log(`[AutoTrade] ✅ ${alert.symbol} - Opening position:`, {
+            side: alert.side,
+            entry: alert.price.toFixed(6),
+            quantity: quantity.toFixed(4),
+            margin: `$${margin.toFixed(2)}`,
+            leverage: `${config.leverage}x`,
+            sl: finalSL.toFixed(6),
+            tp1: newPos.tp1.toFixed(6),
+            tp2: newPos.tp2.toFixed(6)
+          });
+          
           tempPositions.push(newPos);
           tempBalance -= (margin + fee);
           addedAny = true;
+        } else {
+          console.log(`[AutoTrade] ⚠️ ${alert.symbol} - Insufficient balance (need: $${(margin + fee).toFixed(2)}, have: $${tempBalance.toFixed(2)})`);
         }
+      } else {
+        console.log(`[AutoTrade] ❌ ${alert.symbol} - Skipped (checks failed)`);
       }
     }
     

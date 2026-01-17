@@ -23,7 +23,6 @@ interface GroupedTrade {
   timestamp: number;
   closedAt: number;
   source: 'AUTO' | 'MANUAL';
-  alertType?: string;  // 🔧 Alert type eklendi
 }
 
 const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, marketData, onSelectSymbol }) => {
@@ -77,8 +76,7 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
           partials: [],
           timestamp: item.timestamp,
           closedAt: item.closedAt,
-          source: item.source,
-          alertType: item.alertType  // 🔧 Alert type'ı kopyala
+          source: item.source
         };
       }
       
@@ -100,19 +98,27 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
   }, [history, searchQuery]);
 
   const exportToCSV = () => {
-    const headers = ["Asset", "Type", "Side", "Leverage", "Entry", "Final Exit", "Total PNL (USDT)", "Total ROI (%)", "Status", "Date"];
-    const rows = groupedTrades.map(trade => [
-      trade.symbol,
-      trade.source,
-      trade.side,
-      trade.leverage,
-      trade.entryPrice,
-      trade.finalExitPrice,
-      trade.totalPnl.toFixed(2),
-      trade.totalRoi.toFixed(2),
-      trade.status,
-      new Date(trade.closedAt).toLocaleString()
-    ]);
+    const headers = ["Asset", "Type", "Alert Type", "Side", "Leverage", "Entry", "Final Exit", "Total PNL (USDT)", "Total ROI (%)", "Status", "Date"];
+    const rows = groupedTrades.map(trade => {
+      // Alert type'ı al ve format et
+      const alertTypeLabel = trade.alertType 
+        ? trade.alertType.replace(/_/g, ' ')
+        : 'PUMP';
+      
+      return [
+        trade.symbol,
+        trade.source,
+        alertTypeLabel,  // 🔧 YENİ: Alert type
+          trade.side,
+        trade.leverage,
+        trade.entryPrice,
+        trade.finalExitPrice,
+        trade.totalPnl.toFixed(2),
+        trade.totalRoi.toFixed(2),
+        trade.status,
+        new Date(trade.closedAt).toLocaleString()
+      ];
+    });
 
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -134,21 +140,12 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
   const renderReasonBadges = (reason: string) => {
     const parts = reason.split(' ');
     return (
-      <div className="flex flex-wrap gap-1.5">
+      <div className="flex flex-wrap gap-1">
         {parts.map((part, i) => {
-          let style = "bg-[#fcd535]/20 text-[#fcd535] border border-[#fcd535]/40";
-          if (part.includes('TP1') || part.includes('TP2') || part === 'PERFECT') 
-            style = "bg-[#00c076]/20 text-[#00c076] border border-[#00c076]/40";
-          else if (part === 'SL' || part === 'LOSS' || part.includes('STOP')) 
-            style = "bg-[#f84960]/20 text-[#f84960] border border-[#f84960]/40";
-          else if (part === 'BE' || part.includes('(BE)'))
-            style = "bg-blue-500/20 text-blue-400 border border-blue-500/40";
-          
-          return (
-            <span key={i} className={`text-[10px] px-2 py-1 rounded font-black whitespace-nowrap uppercase ${style}`}>
-              {part}
-            </span>
-          );
+          let style = "bg-[#fcd535]/10 text-[#fcd535] border border-[#fcd535]/20";
+          if (part.includes('TP1') || part.includes('TP2') || part === 'PERFECT') style = "bg-[#00c076]/10 text-[#00c076] border border-[#00c076]/20";
+          else if (part === 'SL' || part === 'LOSS') style = "bg-[#f84960]/10 text-[#f84960] border border-[#f84960]/20";
+          return <span key={i} className={`text-[8px] px-1.5 py-0.5 rounded font-black whitespace-nowrap uppercase ${style}`}>{part}</span>;
         })}
       </div>
     );
@@ -278,40 +275,8 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                         }`}>
                           {pos.side} {pos.leverage}X
                         </span>
-                        
-                        {/* 🔧 ALERT TYPE BADGE */}
-                        {pos.alertType && (
-                          <span className={`text-[7px] font-black px-1 py-0.5 rounded leading-none ${
-                            pos.alertType === 'WHALE_ACCUMULATION' 
-                              ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                              : pos.alertType === 'INSTITUTION_ENTRY'
-                                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                : pos.alertType === 'TREND_START'
-                                  ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-                                  : pos.alertType === 'PUMP_START'
-                                    ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                                    : pos.alertType === 'PARABOLIC'
-                                      ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30'
-                                      : pos.alertType === 'STAIRCASE'
-                                        ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
-                                        : pos.alertType === 'INSTITUTIONAL'
-                                          ? 'bg-blue-400/20 text-blue-300 border border-blue-400/30'
-                                          : 'bg-gray-500/20 text-gray-400'
-                          }`}>
-                            {pos.alertType === 'WHALE_ACCUMULATION' ? '🐋 WHALE'
-                              : pos.alertType === 'INSTITUTION_ENTRY' ? '🏛️ INST'
-                              : pos.alertType === 'TREND_START' ? '🚀 TREND'
-                              : pos.alertType === 'PUMP_START' ? '🔥 PUMP'
-                              : pos.alertType === 'PARABOLIC' ? '⚡ PARA'
-                              : pos.alertType === 'STAIRCASE' ? '📊 STAIR'
-                              : pos.alertType === 'INSTITUTIONAL' ? '🏦 INST'
-                              : pos.alertType}
-                          </span>
-                        )}
-                        
-                        {/* SOURCE BADGE */}
                         <span className={`text-[7px] font-black px-1 py-0.25 rounded text-center border leading-none ${
-                          pos.source === 'AUTO' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
+                          pos.source === 'AUTO' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
                         }`}>
                           {pos.source}
                         </span>
@@ -433,52 +398,23 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                       >
                         <div className="col-span-1 flex items-center gap-3">
                           <span className={`text-[#fcd535] transition-transform ${isExpanded ? 'rotate-90' : 'rotate-0'}`}>▶</span>
-                          <div className="flex flex-col gap-0.5">
+                          <div className="flex flex-col">
                             <span 
                               onClick={(e) => { e.stopPropagation(); onSelectSymbol?.(trade.symbol); }}
                               className="text-white font-black text-[12px] group-hover:text-[#fcd535] transition-colors uppercase print:text-black"
                             >
                               {trade.symbol.replace('USDT','')}
                             </span>
-                            
-                            {/* SOURCE + ALERT TYPE */}
-                            <div className="flex items-center gap-1.5">
-                              {/* 🔧 ALERT TYPE BADGE - Daha büyük */}
+                            <div className="flex gap-1 flex-wrap">
+                              <span className="text-[8px] font-black text-blue-400 uppercase">{trade.source}</span>
                               {trade.alertType && (
-                                <span className={`text-[9px] font-black px-2 py-1 rounded border ${
-                                  trade.alertType === 'WHALE_ACCUMULATION' 
-                                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                                    : trade.alertType === 'INSTITUTION_ENTRY'
-                                      ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                                      : trade.alertType === 'TREND_START'
-                                        ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                                        : trade.alertType === 'PUMP_START'
-                                          ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40'
-                                          : trade.alertType === 'PARABOLIC'
-                                            ? 'bg-pink-500/20 text-pink-300 border-pink-500/40'
-                                            : trade.alertType === 'STAIRCASE'
-                                              ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
-                                              : trade.alertType === 'INSTITUTIONAL'
-                                                ? 'bg-blue-400/20 text-blue-200 border-blue-400/40'
-                                                : 'bg-gray-500/20 text-gray-300 border-gray-500/40'
-                                }`}>
-                                  {trade.alertType === 'WHALE_ACCUMULATION' ? '🐋 WHALE'
-                                    : trade.alertType === 'INSTITUTION_ENTRY' ? '🏛️ INST'
-                                    : trade.alertType === 'TREND_START' ? '🚀 TREND'
-                                    : trade.alertType === 'PUMP_START' ? '🔥 PUMP'
-                                    : trade.alertType === 'PARABOLIC' ? '⚡ PARA'
-                                    : trade.alertType === 'STAIRCASE' ? '📊 STAIR'
-                                    : trade.alertType === 'INSTITUTIONAL' ? '🏦 INST'
-                                    : '❓ UNKNOWN'}
+                                <span className="text-[8px] font-black text-[#fcd535] uppercase px-1 bg-black/30 rounded">
+                                  {trade.alertType === 'WHALE_ACCUMULATION' && '🐋 WHALE'}
+                                  {trade.alertType === 'INSTITUTION_ENTRY' && '🏛️ INST'}
+                                  {trade.alertType === 'TREND_START' && '🚀 TREND'}
+                                  {trade.alertType === 'PUMP_START' && '🔥 PUMP'}
                                 </span>
                               )}
-                              
-                              {/* SOURCE BADGE */}
-                              <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded ${
-                                trade.source === 'AUTO' ? 'bg-green-500/20 text-green-400' : 'bg-orange-500/20 text-orange-400'
-                              }`}>
-                                {trade.source}
-                              </span>
                             </div>
                           </div>
                         </div>
@@ -505,13 +441,8 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                           {renderReasonBadges(trade.status)}
                         </div>
 
-                        <div className="col-span-1 text-right">
-                          <div className="text-[11px] text-white font-mono font-bold">
-                            {new Date(trade.closedAt).toLocaleTimeString('en-US', { hour12: false })}
-                          </div>
-                          <div className="text-[9px] text-[#848e9c] font-sans mt-0.5">
-                            {new Date(trade.closedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                          </div>
+                        <div className="col-span-1 text-right text-[9px] text-[#474d57] font-sans">
+                          {new Date(trade.closedAt).toLocaleTimeString('en-US', { hour12: false })}
                         </div>
                       </div>
 
@@ -527,7 +458,7 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                                 </span>
                                 <span className="w-32">QTY: {p.quantity.toFixed(4)}</span>
                                 <span className={`w-20 font-black ${p.pnl >= 0 ? 'text-[#00c076]' : 'text-[#f84960]'}`}>{p.pnlPercent.toFixed(2)}% ROI</span>
-                                <span className="ml-auto text-[10px] text-white font-mono font-bold">{new Date(p.closedAt).toLocaleTimeString('en-US', { hour12: false })}</span>
+                                <span className="ml-auto text-[8px] opacity-60 font-sans">{new Date(p.closedAt).toLocaleTimeString()}</span>
                               </div>
                             ))}
                           </div>
