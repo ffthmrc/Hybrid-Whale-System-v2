@@ -429,6 +429,74 @@ const App: React.FC = () => {
     };
   }, [checkPumpStart]);
 
+  // 🔧 TREND ANALYSIS WITH CANDIDATE DATA (analyzePumpCandidate'ten ÖNCE!)
+  const checkTrendStartWithData = useCallback((
+    candidateData: CandidateData,
+    candleChangePct: number
+  ): { isTrendStart: boolean; details: any } => {
+    const candles = candidateData.klines5m;
+    
+    if (candles.length < SYSTEM_CONFIG.TREND.MIN_CANDLES) {
+      return { isTrendStart: false, details: { reason: 'INSUFFICIENT_DATA', conditionsMet: 0 } };
+    }
+
+    // 1. KONSOLİDASYON
+    const closes = candles.map(k => k.close);
+    const priceRange = Math.max(...closes) - Math.min(...closes);
+    const avgPrice = closes.reduce((a, b) => a + b) / closes.length;
+    const rangePercent = (priceRange / avgPrice) * 100;
+    const isConsolidating = rangePercent < SYSTEM_CONFIG.TREND.CONSOLIDATION_MAX;
+    
+    // 2. BREAKOUT
+    const isBreakout = Math.abs(candleChangePct) >= SYSTEM_CONFIG.TREND.BREAKOUT_MIN;
+    
+    // 3. TREND TEYİT
+    const last3Candles = candles.slice(-3);
+    const isBullish = candleChangePct > 0;
+    const trendConfirmed = isBullish 
+      ? last3Candles.every(c => c.close >= c.open * 0.999)
+      : last3Candles.every(c => c.close <= c.open * 1.001);
+    
+    // 4. HACİM
+    const hasVolumeSpike = candidateData.largeOrderCount >= 3;
+    
+    // 5. CONTEXT - TREND DIRECTION CHECK
+    let contextOK = true;
+    if (candles.length >= 15) {
+      const sma7 = candles.slice(-7).reduce((sum, c) => sum + c.close, 0) / 7;
+      const sma15 = candles.slice(-15).reduce((sum, c) => sum + c.close, 0) / 15;
+      
+      const trendStrength = ((sma7 - sma15) / sma15) * 100;
+      
+      if (isBullish && trendStrength < -5) {
+        console.warn(`[TrendCheck] ⚠️ LONG signal rejected: Strong downtrend (SMA7 ${trendStrength.toFixed(2)}% below SMA15)`);
+        contextOK = false;
+      }
+      if (!isBullish && trendStrength > 5) {
+        console.warn(`[TrendCheck] ⚠️ SHORT signal rejected: Strong uptrend (SMA7 ${trendStrength.toFixed(2)}% above SMA15)`);
+        contextOK = false;
+      }
+    }
+
+    const conditions = [isBreakout, trendConfirmed, hasVolumeSpike, contextOK];
+    const conditionsMet = conditions.filter(Boolean).length;
+    const isTrendStart = isConsolidating && conditionsMet >= 2;
+
+    return { 
+      isTrendStart, 
+      details: {
+        consolidationRange: rangePercent.toFixed(2),
+        breakoutPercent: candleChangePct.toFixed(2),
+        volumeRatio: '0',
+        trendConfirmed,
+        hasVolumeSpike,
+        context: isBullish ? 'BULLISH' : 'BEARISH',
+        contextOK,
+        conditionsMet
+      }
+    };
+  }, []);
+
   // 🔧 DEEP ANALYSIS: PUMP tespit edilen coinler için detaylı analiz
   const analyzePumpCandidate = useCallback(async (
     symbol: string,
@@ -469,23 +537,50 @@ const App: React.FC = () => {
       let reason: string;
       let autoTrade: boolean;
       
-      // 🔧 FIX: Config'ten threshold'ları al (hardcoded değil!)
-      if (whaleScore >= SYSTEM_CONFIG.WHALE.MIN_SCORE_WHALE) {
+      // 🔧 FIX: UI'daki whaleMinScore'u kullan!
+      // WHALE threshold = UI setting
+      // INST threshold = UI setting - 5
+      // TREND threshold = UI setting - 10
+      const whaleThreshold = config.whaleMinScore || 75;
+      const instThreshold = Math.max(whaleThreshold - 5, 50);
+      const trendThreshold = Math.max(whaleThreshold - 25, 40);
+      
+      if (whaleScore >= whaleThreshold) {
         eliteType = 'WHALE_ACCUMULATION';
         reason = '🐋 WHALE ACCUMULATION';
         autoTrade = config.whaleDetectionEnabled;
-      } else if (whaleScore >= SYSTEM_CONFIG.WHALE.MIN_SCORE_INST) {
-        eliteType = 'INSTITUTION_ENTRY';
-        reason = '🏛️ INSTITUTIONAL ENTRY';
-        autoTrade = config.whaleDetectionEnabled;
-      } else if (trendCheck.isTrendStart && whaleScore >= SYSTEM_CONFIG.WHALE.MIN_SCORE_TREND) {
+        console.log(`[ANALYSIS] 🎯 ${symbol} qualifies as WHALE (score ${whaleScore} >= ${whaleThreshold})`);
+      } else if (whaleScore >= instThreshold) {
+        // 🔧 YENİ: INSTITUTION için momentum kontrolü
+        const recentCandles = candidateData.klines1m.slice(-5);
+        const isStillRising = candleChangePct > 0 
+          ? recentCandles.every((c, i) => i === 0 || c.close >= recentCandles[i-1].close * 0.998)
+          : recentCandles.every((c, i) => i === 0 || c.close <= recentCandles[i-1].close * 1.002);
+        
+        if (isStillRising) {
+          eliteType = 'INSTITUTION_ENTRY';
+          reason = '🏛️ INSTITUTIONAL ENTRY';
+          autoTrade = config.whaleDetectionEnabled;
+          console.log(`[ANALYSIS] 🎯 ${symbol} qualifies as INSTITUTION (score ${whaleScore} >= ${instThreshold})`);
+        } else {
+          console.warn(`[ANALYSIS] ⚠️ ${symbol} - INST score (${whaleScore}) but momentum lost, downgrading to TREND`);
+          eliteType = 'TREND_START';
+          reason = '🚀 TREND START';
+          autoTrade = trendCheck.isTrendStart;
+        }
+      } else if (trendCheck.isTrendStart && whaleScore >= trendThreshold) {
         eliteType = 'TREND_START';
         reason = '🚀 TREND START';
         autoTrade = true;
+        console.log(`[ANALYSIS] 🎯 ${symbol} qualifies as TREND (score ${whaleScore} >= ${trendThreshold}, trend confirmed)`);
       } else {
+        // PUMP_START: Düşük skor, trend yok → Manuel onay gerekli
         eliteType = 'PUMP_START';
         reason = '🔥 PUMP DETECTED';
-        autoTrade = false; // Manuel onay gerekli
+        autoTrade = false;  // Manuel check için
+        
+        // ⚠️ PUMP_START çok fazla olabilir, kullanıcı manuel seçsin
+        console.warn(`[ANALYSIS] ⚠️ ${symbol} - Low score (${whaleScore}), no clear trend. Manual review recommended.`);
       }
       
       console.log(`[ANALYSIS] ✅ ${symbol} → ${eliteType} (autoTrade: ${autoTrade}, score: ${whaleScore})`);
@@ -510,7 +605,7 @@ const App: React.FC = () => {
         previousPrice: referencePrice,
         timestamp,
         executed: false,
-        isElite: true,
+        isElite: eliteType !== 'PUMP_START',  // 🔧 FIX: Sadece WHALE/INST/TREND elite
         eliteType,
         volumeMultiplier: volumeRatio,
         autoTrade,
@@ -540,79 +635,13 @@ const App: React.FC = () => {
       console.error(`[ANALYSIS] ❌ ${symbol} analysis failed:`, error);
       return null;
     }
-  }, [fetchCandidateData, calculateWhaleScore, config.whaleDetectionEnabled, config.longEnabled, config.shortEnabled]);
-
-  // 🔧 TREND ANALYSIS (Candidate data ile)
-  const checkTrendStartWithData = useCallback((
-    candidateData: CandidateData,
-    candleChangePct: number
-  ): { isTrendStart: boolean; details: any } => {
-    const candles = candidateData.klines5m;
-    
-    if (candles.length < SYSTEM_CONFIG.TREND.MIN_CANDLES) {
-      return { isTrendStart: false, details: { reason: 'INSUFFICIENT_DATA', conditionsMet: 0 } };
-    }
-
-    // 1. KONSOLİDASYON
-    const closes = candles.map(k => k.close);
-    const priceRange = Math.max(...closes) - Math.min(...closes);
-    const avgPrice = closes.reduce((a, b) => a + b) / closes.length;
-    const rangePercent = (priceRange / avgPrice) * 100;
-    const isConsolidating = rangePercent < SYSTEM_CONFIG.TREND.CONSOLIDATION_MAX;
-    
-    // 2. BREAKOUT
-    const isBreakout = Math.abs(candleChangePct) >= SYSTEM_CONFIG.TREND.BREAKOUT_MIN;
-    
-    // 3. TREND TEYİT
-    const last3Candles = candles.slice(-3);
-    const isBullish = candleChangePct > 0;
-    const trendConfirmed = isBullish 
-      ? last3Candles.every(c => c.close >= c.open * 0.999)
-      : last3Candles.every(c => c.close <= c.open * 1.001);
-    
-    // 4. HACİM
-    const hasVolumeSpike = candidateData.largeOrderCount >= 3;
-    
-    // 5. CONTEXT - TREND DIRECTION CHECK (🔧 FIXED!)
-    let contextOK = true;
-    if (candles.length >= 15) {
-      const sma7 = candles.slice(-7).reduce((sum, c) => sum + c.close, 0) / 7;
-      const sma15 = candles.slice(-15).reduce((sum, c) => sum + c.close, 0) / 15;
-      
-      // Trend strength
-      const trendStrength = ((sma7 - sma15) / sma15) * 100;
-      
-      // 🔧 FIX: Kuvvetli ters trend kontrolü
-      if (isBullish && trendStrength < -5) {
-        // LONG ama kuvvetli downtrend (%5+)
-        console.warn(`[TrendCheck] ⚠️ LONG signal rejected: Strong downtrend (SMA7 ${trendStrength.toFixed(2)}% below SMA15)`);
-        contextOK = false;
-      }
-      if (!isBullish && trendStrength > 5) {
-        // SHORT ama kuvvetli uptrend (%5+)
-        console.warn(`[TrendCheck] ⚠️ SHORT signal rejected: Strong uptrend (SMA7 ${trendStrength.toFixed(2)}% above SMA15)`);
-        contextOK = false;
-      }
-    }
-
-    const conditions = [isBreakout, trendConfirmed, hasVolumeSpike, contextOK];
-    const conditionsMet = conditions.filter(Boolean).length;
-    const isTrendStart = isConsolidating && conditionsMet >= 2;
-
-    return { 
-      isTrendStart, 
-      details: {
-        consolidationRange: rangePercent.toFixed(2),
-        breakoutPercent: candleChangePct.toFixed(2),
-        volumeRatio: '0', // Placeholder
-        trendConfirmed,
-        hasVolumeSpike,
-        context: isBullish ? 'BULLISH' : 'BEARISH',
-        contextOK,
-        conditionsMet
-      }
-    };
-  }, []);
+  }, [
+    fetchCandidateData, 
+    calculateWhaleScore, 
+    checkManipulationRisk,
+    checkTrendStartWithData,
+    config
+  ]);
 
   // Ana WebSocket bağlantısı
   useEffect(() => {
@@ -710,33 +739,9 @@ const App: React.FC = () => {
 
         if (isBlacklisted(symbol)) return;
 
-        // 1. MOMENTUM - BASİT: Sadece %1+ fiyat (hacimden BAĞIMSIZ)
-        if (absChange >= 1.0) {  // Hard-coded %1 (config'ten bağımsız)
-          const cooldownPassed = !lastMomentumAlertRef.current[symbol] || 
-            (now - lastMomentumAlertRef.current[symbol] > 10000); // 10 saniye cooldown
-          
-          if (cooldownPassed) {
-            console.log(`[MOMENTUM] ⚡ ${symbol}: ${candleChangePct.toFixed(2)}% (ref: ${currentCandle.open.toFixed(6)})`);
-            
-            const momentumAlert: TradingAlert = { 
-              id: `momentum-${symbol}-${now}`, 
-              symbol, 
-              side: candleChangePct > 0 ? 'LONG' : 'SHORT',
-              reason: 'PULSE MOMENTUM',
-              change: candleChangePct, 
-              price, 
-              previousPrice: currentCandle.open, // Referans: son mumun open
-              timestamp: now, 
-              executed: false,
-              isElite: false,  // Momentum elite değil
-              volumeMultiplier: 1,
-              autoTrade: false  // Momentum otomatik trade açmaz
-            };
-            
-            newAlertsFound.push(momentumAlert);
-            lastMomentumAlertRef.current[symbol] = now;
-          }
-        }
+        // 🔧 CRITICAL FIX: MOMENTUM ALERT SİSTEMİ KALDIRILDI!
+        // Artık sadece PUMP → Deep Analysis → Elite Alert kullanıyoruz
+        // Momentum alert'leri eliteType olmadan oluşuyordu ve sorun yaratıyordu
 
         // 2. PUMP TESPİTİ → DEEP ANALYSIS (ADAY belirleme)
         if (config.pumpDetectionEnabled) {
@@ -745,6 +750,17 @@ const App: React.FC = () => {
           if (pumpCheck.isPump) {
             const pumpCooldownPassed = !lastPumpAlertRef.current[symbol] || 
               (now - lastPumpAlertRef.current[symbol] > SYSTEM_CONFIG.PUMP.COOLDOWN_MS);
+            
+            // 🔧 DEBUG LOG
+            console.log(`[PUMP] 🔥 ${symbol}:`, {
+              price: price.toFixed(6),
+              change: `${candleChangePct.toFixed(2)}%`,
+              volumeRatio: `${pumpCheck.volumeRatio.toFixed(1)}x`,
+              cooldownPassed: pumpCooldownPassed,
+              lastPump: lastPumpAlertRef.current[symbol] 
+                ? `${((now - lastPumpAlertRef.current[symbol]) / 1000).toFixed(0)}s ago`
+                : 'never'
+            });
             
             if (pumpCooldownPassed) {
               console.log(`[PUMP] 🔥 ${symbol} DETECTED → Starting deep analysis...`);
@@ -761,6 +777,7 @@ const App: React.FC = () => {
                 now
               ).then(analysisResult => {
                 if (analysisResult) {
+                  console.log(`[PUMP] ✅ ${symbol} analysis complete, creating alert...`);
                   // Alert oluştur
                   setAlerts(prev => [analysisResult.alert, ...prev].slice(0, MAX_ALERTS));
                   
@@ -771,8 +788,14 @@ const App: React.FC = () => {
                     setTempTrends(p => ({...p, [symbol]: null})), 
                     SYSTEM_CONFIG.ALERTS.TREND_HIGHLIGHT_DURATION
                   );
+                } else {
+                  console.warn(`[PUMP] ⚠️ ${symbol} analysis returned null (likely filtered out)`);
                 }
+              }).catch(error => {
+                console.error(`[PUMP] ❌ ${symbol} analysis failed:`, error);
               });
+            } else {
+              console.log(`[PUMP] ⏳ ${symbol} cooldown active, skipping...`);
             }
           }
         }
@@ -795,6 +818,8 @@ const App: React.FC = () => {
     isBlacklisted, 
     config.pumpDetectionEnabled,
     config.whaleDetectionEnabled,
+    config.longEnabled,      // 🔧 EKLE
+    config.shortEnabled,     // 🔧 EKLE
     checkPumpStart, 
     analyzePumpCandidate
   ]);
@@ -927,8 +952,9 @@ const App: React.FC = () => {
         // TP2 kontrolü
         const tp2Reached = isLong ? currentPrice >= pos.tp2 : currentPrice <= pos.tp2;
         if (tp2Reached && pos.tp1Hit && !pos.tp2Hit) {
-          const closeQuantity = pos.quantity * 0.50;
-          const keepQuantity = pos.quantity - closeQuantity;
+          // 🔧 FIX: TP2'de kalan %60'ın yarısını (%30'u) kapat
+          const closeQuantity = pos.quantity * 0.50;  // Kalan %60'ın %50'si = total %30
+          const keepQuantity = pos.quantity - closeQuantity;  // %30 kalır (trailing için)
           const priceDiff = isLong ? currentPrice - pos.entryPrice : pos.entryPrice - currentPrice;
           const netPnl = (priceDiff * closeQuantity) - ((closeQuantity * currentPrice) * FEE_RATE);
 
@@ -944,7 +970,7 @@ const App: React.FC = () => {
             reason: 'TP2 (30%)', 
             balanceAfter: account.balance + balanceAdjustment, 
             efficiency: 'PARTIAL',
-            details: 'TP2 hit. 30% closed. Trailing active.'
+            details: 'TP2 hit. 30% closed. 30% remaining with trailing.'
           } as any);
 
           needsStateUpdate = true;
@@ -953,7 +979,8 @@ const App: React.FC = () => {
             tp2Hit: true, 
             trailingStopActive: true, 
             quantity: keepQuantity, 
-            stopLoss: pos.tp1,
+            stopLoss: pos.tp1,  // Trailing başlangıç: TP1 seviyesinden
+            highestPrice: currentPrice,  // 🔧 YENİ: En yüksek fiyat track et
             partialCloses: { ...pos.partialCloses, tp2: closeQuantity } 
           };
         }
@@ -965,11 +992,14 @@ const App: React.FC = () => {
           const newMin = Math.min(pos.minPrice, currentPrice);
           let newTrailingSL = pos.stopLoss;
           
+          // 🔧 FIX: Config'ten trailing percent al
+          const trailingPercent = config.trailingPercent || SYSTEM_CONFIG.TRADING.TRAILING_SL_PERCENT;
+          
           if (isLong) {
-            const calcSL = newMax * (1 - SYSTEM_CONFIG.TRADING.TRAILING_SL_PERCENT / 100);
+            const calcSL = newMax * (1 - trailingPercent / 100);
             if (calcSL > pos.stopLoss) newTrailingSL = calcSL;
           } else {
-            const calcSL = newMin * (1 + SYSTEM_CONFIG.TRADING.TRAILING_SL_PERCENT / 100);
+            const calcSL = newMin * (1 + trailingPercent / 100);
             if (calcSL < pos.stopLoss) newTrailingSL = calcSL;
           }
           
@@ -1002,7 +1032,7 @@ const App: React.FC = () => {
     }, 1000);
     
     return () => clearInterval(interval);
-  }, [positions, marketData, closeTrade, account.balance]);
+  }, [positions, marketData, closeTrade, account.balance, config.trailingPercent]);
 
   // Auto trade processing
   useEffect(() => {
@@ -1117,9 +1147,11 @@ const App: React.FC = () => {
           addedAny = true;
         } else {
           console.log(`[AutoTrade] ⚠️ ${alert.symbol} - Insufficient balance (need: $${(margin + fee).toFixed(2)}, have: $${tempBalance.toFixed(2)})`);
+          processedAlertIds.current.add(alert.id);  // 🔧 Balance yetersiz, ama alert'i işaretle
         }
       } else {
         console.log(`[AutoTrade] ❌ ${alert.symbol} - Skipped (checks failed)`);
+        processedAlertIds.current.add(alert.id);  // 🔧 FIX: Check fail olsa da alert'i işaretle (infinite loop önleme)
       }
     }
     
@@ -1137,7 +1169,7 @@ const App: React.FC = () => {
         console.warn('[Storage] Failed to save processed alerts:', e);
       }
     }
-  }, [alerts, config, positions, account.balance]);
+  }, [alerts, config, positions, account.balance, marketData]);
 
   const handleManualClose = useCallback((id: string) => {
     const pos = positions.find(p => p.id === id);

@@ -23,7 +23,6 @@ interface GroupedTrade {
   timestamp: number;
   closedAt: number;
   source: 'AUTO' | 'MANUAL';
-  alertType?: string;  // 🔧 YENİ: Alert type
 }
 
 const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, marketData, onSelectSymbol }) => {
@@ -77,8 +76,7 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
           partials: [],
           timestamp: item.timestamp,
           closedAt: item.closedAt,
-          source: item.source,
-          alertType: item.alertType  // 🔧 YENİ: Alert type
+          source: item.source
         };
       }
       
@@ -100,27 +98,19 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
   }, [history, searchQuery]);
 
   const exportToCSV = () => {
-    const headers = ["Asset", "Type", "Alert Type", "Side", "Leverage", "Entry", "Final Exit", "Total PNL (USDT)", "Total ROI (%)", "Status", "Date"];
-    const rows = groupedTrades.map(trade => {
-      // Alert type'ı al ve format et
-      const alertTypeLabel = trade.alertType 
-        ? trade.alertType.replace(/_/g, ' ')
-        : 'PUMP';
-      
-      return [
-        trade.symbol,
-        trade.source,
-        alertTypeLabel,  // 🔧 YENİ: Alert type
-          trade.side,
-        trade.leverage,
-        trade.entryPrice,
-        trade.finalExitPrice,
-        trade.totalPnl.toFixed(2),
-        trade.totalRoi.toFixed(2),
-        trade.status,
-        new Date(trade.closedAt).toLocaleString()
-      ];
-    });
+    const headers = ["Asset", "Type", "Side", "Leverage", "Entry", "Final Exit", "Total PNL (USDT)", "Total ROI (%)", "Status", "Date"];
+    const rows = groupedTrades.map(trade => [
+      trade.symbol,
+      trade.source,
+      trade.side,
+      trade.leverage,
+      trade.entryPrice,
+      trade.finalExitPrice,
+      trade.totalPnl.toFixed(2),
+      trade.totalRoi.toFixed(2),
+      trade.status,
+      new Date(trade.closedAt).toLocaleString()
+    ]);
 
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -263,16 +253,16 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
               const isLong = pos.side === 'LONG';
 
               return (
-                <div key={pos.id} onClick={() => onSelectSymbol?.(pos.symbol)} className={`bg-[#1e2329]/40 border ${pos.trailingStopActive ? 'border-[#fcd535]/40 shadow-[0_0_20px_rgba(252,213,53,0.1)]' : pos.tp1Hit ? 'border-[#00c076]/40 shadow-[0_0_20px_rgba(0,192,118,0.1)]' : isProfit ? 'border-[#00c076]/20' : 'border-[#f84960]/20'} rounded-xl p-4 hover:border-[#fcd535]/40 transition-all cursor-pointer group relative overflow-hidden`}>
+                <div key={pos.id} onClick={() => onSelectSymbol?.(pos.symbol)} className={`bg-[#1e2329]/40 border ${pos.trailingStopActive ? 'border-[#fcd535]/40 shadow-[0_0_20px_rgba(252,213,53,0.1)]' : pos.tp1Hit ? 'border-[#00c076]/40 shadow-[0_0_20px_rgba(0,192,118,0.1)]' : isProfit ? 'border-[#00c076]/20' : 'border-[#f84960]/20'} rounded-xl p-3 hover:border-[#fcd535]/40 transition-all cursor-pointer group relative overflow-hidden`}>
                   
                   {/* HEADER: Symbol, Side, PNL */}
-                  <div className="flex justify-between items-start mb-2">
+                  <div className="flex justify-between items-start mb-1.5">
                     <div className="flex items-center gap-2">
-                      <span className="text-xl font-black text-white group-hover:text-[#fcd535] transition-colors leading-none uppercase">
+                      <span className="text-lg font-black text-white group-hover:text-[#fcd535] transition-colors leading-none uppercase">
                         {pos.symbol.replace('USDT','')}
                       </span>
                       <div className="flex flex-col gap-0.5">
-                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded leading-none ${
+                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded leading-none ${
                           isLong ? 'bg-[#00c076]/20 text-[#00c076]' : 'bg-[#f84960]/20 text-[#f84960]'
                         }`}>
                           {pos.side} {pos.leverage}X
@@ -283,7 +273,7 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                           {pos.source}
                         </span>
                         {pos.alertType && (
-                          <span className="text-[7px] font-black px-1 py-0.25 rounded text-center bg-[#fcd535]/10 text-[#fcd535] border border-[#fcd535]/20 leading-none">
+                          <span className="text-[6px] font-black px-1 py-0.25 rounded text-center bg-[#fcd535]/10 text-[#fcd535] border border-[#fcd535]/20 leading-none truncate max-w-[80px]">
                             {pos.alertType === 'WHALE_ACCUMULATION' && '🐋 WHALE'}
                             {pos.alertType === 'INSTITUTION_ENTRY' && '🏛️ INST'}
                             {pos.alertType === 'TREND_START' && '🚀 TREND'}
@@ -293,30 +283,30 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className={`text-xl font-mono font-black ${isProfit ? 'text-[#00c076]' : 'text-[#f84960]'}`}>
+                      <div className={`text-lg font-mono font-black ${isProfit ? 'text-[#00c076]' : 'text-[#f84960]'}`}>
                         {isProfit ? '+' : ''}{livePnlNet.toFixed(2)}
                       </div>
-                      <div className={`text-[10px] font-black leading-none ${isProfit ? 'text-[#00c076]' : 'text-[#f84960]'}`}>
+                      <div className={`text-[9px] font-black leading-none ${isProfit ? 'text-[#00c076]' : 'text-[#f84960]'}`}>
                         {liveRoi.toFixed(2)}% ROI
                       </div>
-                      <div className="text-[9px] text-[#848e9c] font-mono mt-1">
+                      <div className="text-[8px] text-[#848e9c] font-mono mt-0.5">
                         Entry: ${formatPrice(pos.entryPrice)} · {new Date(pos.timestamp).toLocaleTimeString('en-US', { hour12: false })}
                       </div>
                     </div>
                   </div>
 
                   {/* TP STATUS BADGES */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded font-black uppercase ${pos.tp1Hit ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
+                  <div className="flex items-center gap-1.5 mb-2">
+                    <div className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${pos.tp1Hit ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
                       <span>{pos.tp1Hit ? '✓' : '○'}</span>
                       <span>TP1</span>
                     </div>
-                    <div className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded font-black uppercase ${pos.tp2Hit ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
+                    <div className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${pos.tp2Hit ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
                       <span>{pos.tp2Hit ? '✓' : '○'}</span>
                       <span>TP2</span>
                     </div>
                     {pos.trailingStopActive && (
-                      <div className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-[#fcd535]/20 text-[#fcd535] font-black uppercase animate-pulse border border-[#fcd535]/30">
+                      <div className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-[#fcd535]/20 text-[#fcd535] font-black uppercase animate-pulse border border-[#fcd535]/30">
                         <span>🎯</span>
                         <span>TRAIL</span>
                       </div>
@@ -324,8 +314,8 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                   </div>
 
                   {/* QUANTITY INFO */}
-                  <div className="text-[10px] text-gray-400 mb-3 space-y-1">
-                    <div className="flex justify-between text-[10px] font-black uppercase">
+                  <div className="text-[9px] text-gray-400 mb-2 space-y-0.5">
+                    <div className="flex justify-between text-[9px] font-black uppercase">
                       <span className="text-[#848e9c]">QUANTITY:</span>
                       <span className="text-green-400 font-mono">
                         ({((pos.quantity / pos.initialQuantity) * 100).toFixed(0)}%)
@@ -347,8 +337,8 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                   </div>
 
                   {/* STOP LOSS & TP INFO */}
-                  <div className="space-y-1.5 mb-4">
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase">
+                  <div className="space-y-1 mb-2">
+                    <div className="flex items-center gap-2 text-[9px] font-black uppercase">
                       <span className="text-[#848e9c]">CURRENT STOP:</span>
                       <span className="text-[#f84960] font-mono flex items-center gap-1">
                         ${formatPrice(pos.stopLoss)}
@@ -357,7 +347,7 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                     </div>
 
                     {!pos.trailingStopActive && (
-                      <div className="flex items-center gap-2 text-[10px] font-black uppercase">
+                      <div className="flex items-center gap-2 text-[9px] font-black uppercase">
                         <span className="text-[#848e9c]">TP2 TARGET:</span>
                         <span className="text-[#00c076] font-mono">
                           ${formatPrice(pos.tp2)}
@@ -367,7 +357,7 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                   </div>
 
                   {/* RISK BAR */}
-                  <div className="mb-4">
+                  <div className="mb-2">
                     {getRiskBar(pos)}
                   </div>
 
@@ -415,17 +405,15 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                             >
                               {trade.symbol.replace('USDT','')}
                             </span>
-                            <div className="flex gap-1 flex-wrap">
-                              <span className="text-[8px] font-black text-blue-400 uppercase">{trade.source}</span>
-                              {trade.alertType && (
-                                <span className="text-[8px] font-black text-[#fcd535] uppercase px-1 bg-black/30 rounded">
-                                  {trade.alertType === 'WHALE_ACCUMULATION' && '🐋 WHALE'}
-                                  {trade.alertType === 'INSTITUTION_ENTRY' && '🏛️ INST'}
-                                  {trade.alertType === 'TREND_START' && '🚀 TREND'}
-                                  {trade.alertType === 'PUMP_START' && '🔥 PUMP'}
-                                </span>
-                              )}
-                            </div>
+                            <span className="text-[8px] font-black text-blue-400 uppercase">{trade.source}</span>
+                            {trade.partials[0]?.alertType && (
+                              <span className="text-[6px] font-black px-1 py-0.25 rounded bg-[#fcd535]/10 text-[#fcd535] border border-[#fcd535]/20 leading-none mt-0.5 truncate max-w-[70px]">
+                                {trade.partials[0].alertType === 'WHALE_ACCUMULATION' && '🐋 WHALE'}
+                                {trade.partials[0].alertType === 'INSTITUTION_ENTRY' && '🏛️ INST'}
+                                {trade.partials[0].alertType === 'TREND_START' && '🚀 TREND'}
+                                {trade.partials[0].alertType === 'PUMP_START' && '🔥 PUMP'}
+                              </span>
+                            )}
                           </div>
                         </div>
 

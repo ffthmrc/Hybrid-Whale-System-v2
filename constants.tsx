@@ -2,24 +2,28 @@ import { StrategyConfig } from './types';
 
 // 🔧 UPDATED: Tüm yeni alanlar eklendi
 export const DEFAULT_CONFIG: StrategyConfig = {
-  autoTrading: true,          // ⚠️ İlk test için kapalı
+  autoTrading: true,
   eliteMode: true, 
   pumpDetectionEnabled: true,
-  whaleDetectionEnabled: true,  // YENİ: Whale detection aktif
+  whaleDetectionEnabled: true,
   longEnabled: true,
-  shortEnabled: false,          // ⚠️ İlk test için sadece LONG
-  leverage: 15,                 // ⚠️ İlk test için düşük kaldıraç
-  riskPerTrade: 1.0,        
-  priceChangeThreshold: 0.9,    // 🔧 Config'den gelecek (ALERTS.PRICE_CHANGE_THRESHOLD)
-  stopLossPercent: 2.0,     
-  tp1Percent: 1.5,              // 🔧 Biraz artırıldı
-  tp2Percent: 4.0,              // 🔧 Biraz artırıldı
+  shortEnabled: false,
+  leverage: 15,
+  riskPerTrade: 1.0,
+  priceChangeThreshold: 0.9,
+  stopLossPercent: 2.0,
+  tp1Percent: 1.5,
+  tp2Percent: 4.0,
+  tp3Enabled: true,          // 🔧 EKLE
+  trailingPercent: 2.0,      // 🔧 EKLE
+  tp1ClosePercent: 40,       // 🔧 EKLE
+  tp2ClosePercent: 30,       // 🔧 EKLE
   cooldownMinutes: 5,
-  maxConcurrentTrades: 10,      // ⚠️ İlk test için düşük
-  blacklist: ['FLOW', 'FOGO', 'BOME'], // 🔧 BOME eklendi
-  whaleMinScore: 60,            // 🔧 55'ten 60'a çıkarıldı
-  useDynamicStopLoss: true,     // YENİ: Dinamik SL kullan
-  ringEnabled: true,            // YENİ: Whale alert ses bildirimi
+  maxConcurrentTrades: 10,
+  blacklist: ['FLOW', 'FOGO', 'BOME', 'CELO'],  // 🔧 CELO eklendi
+  whaleMinScore: 60,
+  useDynamicStopLoss: false,  // 🔧 FALSE (ilk test)
+  ringEnabled: true,
 };
 
 export const COLORS = {

@@ -36,8 +36,8 @@ export const SYSTEM_CONFIG = {
   // ==========================================
   WHALE: {
     // 🔧 YENİ: Threshold'lar ayrıldı ve artırıldı
-    MIN_SCORE_WHALE: 75,             // WHALE_ACCUMULATION için min (artırıldı)
-    MIN_SCORE_INST: 65,              // INSTITUTION_ENTRY için min (artırıldı)
+    MIN_SCORE_WHALE: 75,             // WHALE_ACCUMULATION için min
+    MIN_SCORE_INST: 70,              // 🔧 YENİ: 65 → 70 (daha sıkı)
     MIN_SCORE_TREND: 50,             // TREND_START için min (whale ile)
     LARGE_TRADE_MULTIPLIER: 5,       // Ortalama trade'in kaç katı "büyük" sayılır
     ORDER_IMBALANCE_THRESHOLD: 2.0,  // Bid/Ask imbalance eşiği
@@ -120,13 +120,17 @@ export const DEFAULT_STRATEGY_CONFIG = {
   riskPerTrade: 1.0,
   priceChangeThreshold: 1.0,
   stopLossPercent: 2.0,
-  tp1Percent: 1.5,
-  tp2Percent: 4.0,
+  tp1Percent: 1.5,             // TP1: +1.5%
+  tp2Percent: 4.0,             // TP2: +4.0%
+  tp3Enabled: true,            // 🔧 YENİ: TP3 trailing aktif
+  trailingPercent: 2.0,        // 🔧 YENİ: %2 trailing distance
+  tp1ClosePercent: 40,         // 🔧 YENİ: TP1'de %40 kapat
+  tp2ClosePercent: 30,         // 🔧 YENİ: TP2'de %30 kapat
   cooldownMinutes: 5,
   maxConcurrentTrades: 10,
   blacklist: ['FLOW', 'FOGO', 'BOME', 'CELO'],  // 🔧 CELO eklendi
   whaleMinScore: 75,           // 🔧 60'tan 75'e çıkarıldı
-  useDynamicStopLoss: true,
+  useDynamicStopLoss: false,   // 🔧 FALSE (ilk test için)
   ringEnabled: true,
 };
 
