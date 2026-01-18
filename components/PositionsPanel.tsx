@@ -235,7 +235,7 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
       
       <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#0b0e11] print:bg-white">
         {activeTab === 'active' ? (
-          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 print:hidden">
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 print:hidden">
             {positions.length === 0 && (
               <div className="col-span-full py-12 flex flex-col items-center justify-center opacity-30">
                 <span className="text-4xl mb-4">⚓</span>
