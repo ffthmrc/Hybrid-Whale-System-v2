@@ -1,5 +1,6 @@
 import { StrategyConfig } from './types';
 
+// 🔧 UPDATED: Tüm yeni alanlar eklendi
 export const DEFAULT_CONFIG: StrategyConfig = {
   autoTrading: true,
   eliteMode: true, 
@@ -13,15 +14,15 @@ export const DEFAULT_CONFIG: StrategyConfig = {
   stopLossPercent: 2.0,
   tp1Percent: 1.5,
   tp2Percent: 4.0,
-  tp3Enabled: true,
-  trailingPercent: 4.0,
-  tp1ClosePercent: 40,
-  tp2ClosePercent: 30,
+  tp3Enabled: true,          // 🔧 EKLE
+  trailingPercent: 2.0,      // 🔧 EKLE
+  tp1ClosePercent: 40,       // 🔧 EKLE
+  tp2ClosePercent: 30,       // 🔧 EKLE
   cooldownMinutes: 5,
   maxConcurrentTrades: 10,
-  blacklist: ['FLOW', 'FOGO', 'BOME', 'CELO'],
-  whaleMinScore: 75,          // 🔧 75'e çıkarıldı
-  useDynamicStopLoss: false,
+  blacklist: ['FLOW', 'FOGO', 'BOME', 'CELO'],  // 🔧 CELO eklendi
+  whaleMinScore: 60,
+  useDynamicStopLoss: false,  // 🔧 FALSE (ilk test)
   ringEnabled: true,
 };
 

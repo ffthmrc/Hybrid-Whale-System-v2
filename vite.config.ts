@@ -15,8 +15,6 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/binance-spot/, ''),
             secure: true,
-            timeout: 30000,      // 🔧 ADDED: 30 second timeout
-            proxyTimeout: 30000  // 🔧 ADDED: 30 second proxy timeout
           },
           // Binance Futures API proxy
           '/binance-futures': {
@@ -24,8 +22,6 @@ export default defineConfig(({ mode }) => {
             changeOrigin: true,
             rewrite: (path) => path.replace(/^\/binance-futures/, ''),
             secure: true,
-            timeout: 30000,      // 🔧 ADDED: 30 second timeout
-            proxyTimeout: 30000  // 🔧 ADDED: 30 second proxy timeout
           }
         }
       },

@@ -26,56 +26,27 @@ export interface Position {
   partialCloses: { tp1: number; tp2: number };
   pnl: number;
   pnlPercent: number;
-  maxPnlPercent: number;
+  maxPnlPercent: number; 
   timestamp: number;
-  actualEntryTime: number;
-  executionDelay?: number;
   margin: number;
   fees: number;
-  minPrice: number;
+  minPrice: number; 
   maxPrice: number;
-  highestPrice?: number;
+  highestPrice?: number;   // 🔧 YENİ: Trailing için en yüksek fiyat tracking
   source: 'AUTO' | 'MANUAL';
   alertType?: string;
   dynamicSLBase?: number;
   supportLevel?: number;
   resistanceLevel?: number;
-  tp1HitTime?: number;
-  tp2HitTime?: number;
-  trailingStartTime?: number;
 }
 
 export interface TradeHistoryItem {
-  id: string;
-  symbol: string;
-  side: Side;
-  leverage: number;
-  quantity: number;
-  entryPrice: number;
-  exitPrice: number;
-  stopLoss: number;
-  tp1: number;
-  tp2: number;
-  pnl: number;
-  pnlPercent: number;
-  maxPnlPercent: number;
-  timestamp: number;          // Entry time
-  closedAt: number;           // Exit time
-  duration: number;
-  balanceAfter: number;
-  reason: string;
-  efficiency: 'PERFECT' | 'PARTIAL' | 'LOSS' | 'BE';
-  details: string;
-  totalFees: number;
-  minPriceDuringTrade: number;
-  maxPriceDuringTrade: number;
-  initialMargin: number;
-  source: 'AUTO' | 'MANUAL';
-  alertType?: string;
-  tp1HitTime?: number;        // TP1 kapanış zamanı
-  tp2HitTime?: number;        // TP2 kapanış zamanı
-  trailingStartTime?: number; // Trailing SL başlangıç zamanı
-  slHitTime?: number;         // SL kapanış zamanı (eğer SL'de kapandıysa)
+  id: string; symbol: string; side: Side; leverage: number; quantity: number;
+  entryPrice: number; exitPrice: number; stopLoss: number; tp1: number; tp2: number;
+  pnl: number; pnlPercent: number; maxPnlPercent: number; timestamp: number; closedAt: number;
+  duration: number; balanceAfter: number; reason: string; efficiency: 'PERFECT' | 'PARTIAL' | 'LOSS' | 'BE';
+  details: string; totalFees: number; minPriceDuringTrade: number; maxPriceDuringTrade: number;
+  initialMargin: number; source: 'AUTO' | 'MANUAL'; alertType?: string;
 }
 
 export interface TradingAlert {
@@ -113,29 +84,16 @@ export interface RecentTrade {
 }
 
 export interface ActiveTrack {
-  symbol: string;
-  startTime: number;
+  symbol: string; startTime: number;
   pumpData: { price: number; change: number; volumeRatio: number; side: Side };
   baseline: { price: number; volume: number; openInterest?: number; fundingRate?: number };
   klines: { m1: Kline[]; m5: Kline[]; m15: Kline[] };
   recentTrades: RecentTrade[];
   sr: { support: number; resistance: number; pivots: Array<{ price: number; type: 'support' | 'resistance'; strength: number }> };
-
-  // ────────────── BURAYI DEĞİŞTİR ──────────────
-  streams: {
-    aggTrade?: { close(): void };
-    bookTicker?: { close(): void };
-    // İleride başka stream eklemek istersen buraya ekleyebilirsin
-  };
-
-  // ────────────── Cleanup için yeni alan ──────────────
-  cleanup?: () => void;
-
+  streams: { aggTrade?: WebSocket; bookTicker?: WebSocket };
   score: { whale: number; trend: number; momentum: number };
-  conditions: { 
-    consolidation: boolean; breakout: boolean; volumeConfirm: boolean; trendAlignment: boolean;
-    largeOrders: boolean; imbalance: boolean; supportResistance: boolean; volatilitySpike: boolean 
-  };
+  conditions: { consolidation: boolean; breakout: boolean; volumeConfirm: boolean; trendAlignment: boolean;
+                largeOrders: boolean; imbalance: boolean; supportResistance: boolean; volatilitySpike: boolean };
   tradeData: { avgSize: number; largeTradeCount: number; buyPressure: number; sellPressure: number; recentLargeSize: number };
   orderBook: { bidQty: number; askQty: number; imbalance: number; lastUpdate: number };
   alerts: { whaleGenerated: boolean; trendGenerated: boolean };

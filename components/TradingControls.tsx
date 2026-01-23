@@ -13,13 +13,10 @@ interface Props {
 }
 
 const TradingControls: React.FC<Props> = ({ config, setConfig, account, marketData, positions, emergencyStop, onManualTrade, onRemoveBlacklist }) => {
-  const [isBotSettingsExpanded, setIsBotSettingsExpanded] = useState(false);
   const [isManualExpanded, setIsManualExpanded] = useState(false);
-  const [isBlacklistExpanded, setIsBlacklistExpanded] = useState(false);
-  const [isWhaleConfigExpanded, setIsWhaleConfigExpanded] = useState(false); // 🔧 YENİ: Whale iç daraltma
   const [manualSymbol, setManualSymbol] = useState('');
   const [manualSide, setManualSide] = useState<Side>('LONG');
-  const [newBlacklistSymbol, setNewBlacklistSymbol] = useState('');
+  const [newBlacklistSymbol, setNewBlacklistSymbol] = useState('');  // 🔧 YENİ
 
   const handleChange = (key: keyof StrategyConfig, value: any) => {
     setConfig(prev => ({ ...prev, [key]: value }));
@@ -27,7 +24,7 @@ const TradingControls: React.FC<Props> = ({ config, setConfig, account, marketDa
 
   const FEE_RATE = 0.0005; 
 
-  const { sessionProfit, sessionGrowthPct } = useMemo(() => {
+  const { totalEquity, sessionProfit, sessionGrowthPct } = useMemo(() => {
     let liveUnrealizedPnl = 0;
     let totalMarginInTrades = 0;
     let estimatedExitFees = 0;
@@ -45,12 +42,17 @@ const TradingControls: React.FC<Props> = ({ config, setConfig, account, marketDa
     });
 
     const netLiveUnrealized = liveUnrealizedPnl - estimatedExitFees;
+
+    // 🔹 Equity hesaplama: balance + pozisyonlar + net PnL
     const currentEquity = account.balance + totalMarginInTrades + netLiveUnrealized;
+
+    // 🔹 Session profit ve live growth
     const profit = currentEquity - account.initialBalance;
     const growthPct = (profit / account.initialBalance) * 100;
 
-    return { sessionProfit: profit, sessionGrowthPct: growthPct };
-  }, [account, positions, marketData]);
+    return { totalEquity: currentEquity, sessionProfit: profit, sessionGrowthPct: growthPct };
+}, [account, positions, marketData]);
+
 
   const isProfitable = sessionProfit >= 0;
 
@@ -134,199 +136,220 @@ const TradingControls: React.FC<Props> = ({ config, setConfig, account, marketDa
         )}
         
         {config.whaleDetectionEnabled && (
-           <div className="px-3 py-1.5 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded text-[9px] font-bold text-purple-400 flex items-center gap-2 mt-1">
-             <span>🐋</span>
-             WHALE MODE: Büyük emirler ve order book dengesizliği takip ediliyor.
+           <div className="space-y-2 mt-1">
+             <div className="px-3 py-1.5 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded text-[9px] font-bold text-purple-400 flex items-center gap-2">
+                <span>🐋</span>
+                WHALE MODE: Büyük emirler ve order book dengesizliği takip ediliyor.
+             </div>
+             
+             {/* Whale Settings */}
+             <div className="grid grid-cols-3 gap-2 px-2">
+               <div className="space-y-1">
+                 <label className="text-[8px] font-black text-purple-400 uppercase flex items-center gap-1">
+                   🎯 Min
+                 </label>
+                 <input 
+                   type="number" 
+                   min="0" 
+                   max="100" 
+                   step="5"
+                   value={config.whaleMinScore} 
+                   onChange={(e) => handleChange('whaleMinScore', parseFloat(e.target.value))} 
+                   className="w-full bg-[#0b0e11] border border-purple-500/30 rounded px-2 py-1 text-xs font-black text-purple-300 outline-none focus:border-purple-500"
+                 />
+                 <div className="text-[7px] text-[#848e9c] font-bold">Score</div>
+               </div>
+               
+               <div className="space-y-1">
+                 <label className="text-[8px] font-black text-pink-400 uppercase flex items-center gap-1">
+                   🎯 SL
+                 </label>
+                 <button 
+                   onClick={() => handleChange('useDynamicStopLoss', !config.useDynamicStopLoss)}
+                   className={`w-full py-1.5 rounded text-[9px] font-black border transition-all ${
+                     config.useDynamicStopLoss 
+                       ? 'bg-pink-600/20 border-pink-500 text-pink-300' 
+                       : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'
+                   }`}
+                 >
+                   {config.useDynamicStopLoss ? 'ON' : 'OFF'}
+                 </button>
+                 <div className="text-[7px] text-[#848e9c] font-bold">Dynamic</div>
+               </div>
+
+               <div className="space-y-1">
+                 <label className="text-[8px] font-black text-yellow-400 uppercase flex items-center gap-1">
+                   🔔 Ring
+                 </label>
+                 <button 
+                   onClick={() => handleChange('ringEnabled', !config.ringEnabled)}
+                   className={`w-full py-1.5 rounded text-[9px] font-black border transition-all ${
+                     config.ringEnabled 
+                       ? 'bg-yellow-600/20 border-yellow-500 text-yellow-300 animate-pulse' 
+                       : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'
+                   }`}
+                 >
+                   {config.ringEnabled ? 'ON' : 'OFF'}
+                 </button>
+                 <div className="text-[7px] text-[#848e9c] font-bold">Sound</div>
+               </div>
+             </div>
            </div>
         )}
       </div>
 
-      <div className="bg-[#1e2329]/50 rounded-xl border border-[#2b3139] overflow-hidden transition-all">
-        <button 
-          onClick={() => setIsBotSettingsExpanded(!isBotSettingsExpanded)}
-          className="w-full px-4 py-3 flex items-center justify-between hover:bg-white/5 transition-colors border-b border-[#2b3139]/30"
-        >
-          <div className="text-[10px] font-black text-[#fcd535] uppercase tracking-widest">
-            Bot Settings
+      <div className="space-y-3 bg-[#1e2329]/50 p-4 rounded-xl border border-[#2b3139]">
+        <div className="text-[10px] font-black text-[#fcd535] uppercase tracking-widest border-b border-[#2b3139] pb-2 mb-2">Bot Settings</div>
+        <div className="grid grid-cols-2 gap-2">
+          <button onClick={() => handleChange('longEnabled', !config.longEnabled)} className={`py-2 rounded text-[10px] font-black border transition-all ${config.longEnabled ? 'bg-[#00c076]/20 border-[#00c076] text-[#00c076]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}>LONG {config.longEnabled ? 'ON' : 'OFF'}</button>
+          <button onClick={() => handleChange('shortEnabled', !config.shortEnabled)} className={`py-2 rounded text-[10px] font-black border transition-all ${config.shortEnabled ? 'bg-[#f84960]/20 border-[#f84960] text-[#f84960]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}>SHORT {config.shortEnabled ? 'ON' : 'OFF'}</button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-[#848e9c] uppercase">Risk / Trade (%)</label>
+            <input type="number" step="0.1" value={config.riskPerTrade} onChange={(e) => handleChange('riskPerTrade', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
           </div>
-          <span className="text-[#848e9c] text-[10px]">
-            {isBotSettingsExpanded ? '▲' : '▼'}
-          </span>
-        </button>
-
-        {isBotSettingsExpanded && (
-          <div className="p-4 space-y-3 animate-in slide-in-from-top-2 duration-300">
-            {/* 🔧 YENİ: Whale Params (Collapsible inside Bot Settings) */}
-            <div className="border border-purple-500/20 rounded-lg overflow-hidden bg-purple-500/5">
-              <button 
-                onClick={() => setIsWhaleConfigExpanded(!isWhaleConfigExpanded)}
-                className="w-full px-3 py-2 flex items-center justify-between hover:bg-purple-500/10 transition-colors"
-              >
-                <div className="text-[8px] font-black text-purple-400 uppercase flex items-center gap-2">
-                  <span>🐋</span> Whale Mode Parameters
-                </div>
-                <span className="text-purple-400 text-[8px]">{isWhaleConfigExpanded ? '▲' : '▼'}</span>
-              </button>
-              
-              {isWhaleConfigExpanded && (
-                <div className="px-3 pb-3 grid grid-cols-3 gap-2 animate-in fade-in duration-200">
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black text-purple-400 uppercase">🎯 Min</label>
-                    <input 
-                      type="number" min="0" max="100" step="5"
-                      value={config.whaleMinScore} 
-                      onChange={(e) => handleChange('whaleMinScore', parseFloat(e.target.value))} 
-                      className="w-full bg-[#0b0e11] border border-purple-500/30 rounded px-2 py-1 text-[10px] font-black text-purple-300 outline-none"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black text-pink-400 uppercase">🎯 SL</label>
-                    <button 
-                      onClick={() => handleChange('useDynamicStopLoss', !config.useDynamicStopLoss)}
-                      className={`w-full py-1 rounded text-[8px] font-black border transition-all ${config.useDynamicStopLoss ? 'bg-pink-600/20 border-pink-500 text-pink-300' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}
-                    >
-                      {config.useDynamicStopLoss ? 'DYNAMIC' : 'STATIC'}
-                    </button>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[8px] font-black text-yellow-400 uppercase">🔔 Ring</label>
-                    <button 
-                      onClick={() => handleChange('ringEnabled', !config.ringEnabled)}
-                      className={`w-full py-1 rounded text-[8px] font-black border transition-all ${config.ringEnabled ? 'bg-yellow-600/20 border-yellow-500 text-yellow-300' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}
-                    >
-                      {config.ringEnabled ? 'ON' : 'OFF'}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => handleChange('longEnabled', !config.longEnabled)} className={`py-2 rounded text-[10px] font-black border transition-all ${config.longEnabled ? 'bg-[#00c076]/20 border-[#00c076] text-[#00c076]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}>LONG {config.longEnabled ? 'ON' : 'OFF'}</button>
-              <button onClick={() => handleChange('shortEnabled', !config.shortEnabled)} className={`py-2 rounded text-[10px] font-black border transition-all ${config.shortEnabled ? 'bg-[#f84960]/20 border-[#f84960] text-[#f84960]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}>SHORT {config.shortEnabled ? 'ON' : 'OFF'}</button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-[#848e9c] uppercase">Risk / Trade (%)</label>
-                <input type="number" step="0.1" value={config.riskPerTrade} onChange={(e) => handleChange('riskPerTrade', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-[#848e9c] uppercase">Leverage (X)</label>
-                <input type="number" value={config.leverage} onChange={(e) => handleChange('leverage', parseInt(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-[#848e9c] uppercase">Stop Loss (%)</label>
-                <input type="number" step="0.1" value={config.stopLossPercent} onChange={(e) => handleChange('stopLossPercent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-[#848e9c] uppercase">TP 1 (%)</label>
-                <input type="number" step="0.1" value={config.tp1Percent} onChange={(e) => handleChange('tp1Percent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-[#848e9c] uppercase">TP 2 (%)</label>
-                <input type="number" step="0.1" value={config.tp2Percent} onChange={(e) => handleChange('tp2Percent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[9px] font-black text-[#848e9c] uppercase">Max Trades</label>
-                <input type="number" value={config.maxConcurrentTrades} onChange={(e) => handleChange('maxConcurrentTrades', parseInt(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-              </div>
-            </div>
-
-            <div className="mt-4 pt-2 border-t border-[#2b3139]">
-              <button 
-                onClick={() => setIsManualExpanded(!isManualExpanded)} 
-                className="w-full py-1 text-[9px] font-black text-[#848e9c] uppercase hover:text-white flex items-center justify-center gap-1"
-              >
-                {isManualExpanded ? '▲ HIDE MANUAL ENTRY' : '▼ SHOW MANUAL ENTRY'}
-              </button>
-              {isManualExpanded && (
-                <div className="mt-2 space-y-2">
-                  <input 
-                    type="text" placeholder="SYMBOL (E.G. SOL)" value={manualSymbol} 
-                    onChange={(e) => setManualSymbol(e.target.value.toUpperCase())} 
-                    className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1.5 text-[10px] font-black text-white uppercase outline-none focus:border-[#fcd535]"
-                  />
-                  <div className="grid grid-cols-2 gap-2">
-                    <button onClick={() => setManualSide('LONG')} className={`py-1.5 rounded text-[9px] font-black border transition-all ${manualSide === 'LONG' ? 'bg-[#00c076] text-black border-[#00c076]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}>LONG</button>
-                    <button onClick={() => setManualSide('SHORT')} className={`py-1.5 rounded text-[9px] font-black border transition-all ${manualSide === 'SHORT' ? 'bg-[#f84960] text-black border-[#f84960]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}>SHORT</button>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      if(!manualSymbol) return;
-                      onManualTrade({ symbol: manualSymbol, side: manualSide, leverage: config.leverage, riskValue: config.riskPerTrade, sl: config.stopLossPercent, tp1: config.tp1Percent, tp2: config.tp2Percent });
-                      setManualSymbol('');
-                    }} 
-                    className="w-full py-2 bg-[#fcd535] text-black rounded text-[10px] font-black uppercase hover:bg-white transition-all shadow-lg active:scale-95"
-                  >
-                    OPEN MANUAL POSITION
-                  </button>
-                </div>
-              )}
-            </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-[#848e9c] uppercase">Leverage (X)</label>
+            <input type="number" value={config.leverage} onChange={(e) => handleChange('leverage', parseInt(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
           </div>
-        )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-[#848e9c] uppercase">Stop Loss (%)</label>
+            <input type="number" step="0.1" value={config.stopLossPercent} onChange={(e) => handleChange('stopLossPercent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-[#848e9c] uppercase">TP 1 (%)</label>
+            <input type="number" step="0.1" value={config.tp1Percent} onChange={(e) => handleChange('tp1Percent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-[#848e9c] uppercase">TP 2 (%)</label>
+            <input type="number" step="0.1" value={config.tp2Percent} onChange={(e) => handleChange('tp2Percent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-[#848e9c] uppercase">Max Trades</label>
+            <input type="number" value={config.maxConcurrentTrades} onChange={(e) => handleChange('maxConcurrentTrades', parseInt(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-2 border-t border-[#2b3139]">
+          <button 
+            onClick={() => setIsManualExpanded(!isManualExpanded)} 
+            className="w-full py-1 text-[9px] font-black text-[#848e9c] uppercase hover:text-white flex items-center justify-center gap-1"
+          >
+            {isManualExpanded ? '▲ HIDE MANUAL ENTRY' : '▼ SHOW MANUAL ENTRY'}
+          </button>
+          {isManualExpanded && (
+            <div className="mt-2 space-y-2">
+              <input 
+                type="text" 
+                placeholder="SYMBOL (E.G. SOL)" 
+                value={manualSymbol} 
+                onChange={(e) => setManualSymbol(e.target.value.toUpperCase())} 
+                className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1.5 text-[10px] font-black text-white uppercase outline-none focus:border-[#fcd535]"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <button 
+                  onClick={() => setManualSide('LONG')} 
+                  className={`py-1.5 rounded text-[9px] font-black border transition-all ${manualSide === 'LONG' ? 'bg-[#00c076] text-black border-[#00c076]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}
+                >
+                  LONG
+                </button>
+                <button 
+                  onClick={() => setManualSide('SHORT')} 
+                  className={`py-1.5 rounded text-[9px] font-black border transition-all ${manualSide === 'SHORT' ? 'bg-[#f84960] text-black border-[#f84960]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}
+                >
+                  SHORT
+                </button>
+              </div>
+              <button 
+                onClick={() => {
+                  if(!manualSymbol) return;
+                  onManualTrade({ 
+                    symbol: manualSymbol, 
+                    side: manualSide, 
+                    leverage: config.leverage, 
+                    riskValue: config.riskPerTrade, 
+                    sl: config.stopLossPercent, 
+                    tp1: config.tp1Percent, 
+                    tp2: config.tp2Percent 
+                  });
+                  setManualSymbol('');
+                }} 
+                className="w-full py-2 bg-[#fcd535] text-black rounded text-[10px] font-black uppercase hover:bg-white transition-all shadow-lg active:scale-95"
+              >
+                OPEN MANUAL POSITION
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="bg-[#1e2329]/50 rounded-xl border border-[#2b3139] overflow-hidden transition-all">
-        <button 
-          onClick={() => setIsBlacklistExpanded(!isBlacklistExpanded)}
-          className="w-full px-3 py-2 flex items-center justify-between hover:bg-white/5 transition-colors"
-        >
-          <div className="text-[9px] font-black text-[#fcd535] uppercase tracking-widest">
-            Blacklist ({config.blacklist.length})
-          </div>
-          <span className="text-[#848e9c] text-[10px]">{isBlacklistExpanded ? '▲' : '▼'}</span>
-        </button>
+      {/* 🔧 YENİ: BLACKLIST YÖNETİMİ */}
+      <div className="space-y-2 bg-[#1e2329]/50 p-3 rounded-lg border border-[#2b3139]">
+        <div className="text-[9px] font-black text-[#fcd535] uppercase tracking-widest border-b border-[#2b3139] pb-2">
+          Blacklist ({config.blacklist.length})
+        </div>
         
-        {isBlacklistExpanded && (
-          <div className="p-3 pt-0 space-y-2 border-t border-[#2b3139]/50 animate-in slide-in-from-top-2">
-            <div className="space-y-1 max-h-24 overflow-y-auto custom-scrollbar mt-2">
-              {config.blacklist.length === 0 ? (
-                <div className="text-center py-2 text-[#848e9c] text-[9px] font-bold opacity-50">No blacklisted coins</div>
-              ) : (
-                config.blacklist.map(symbol => (
-                  <div key={symbol} className="flex items-center justify-between bg-[#0b0e11] px-2 py-1.5 rounded border border-[#2b3139] hover:border-[#f84960]/50 transition-all group">
-                    <span className="text-[10px] font-black text-white uppercase">{symbol}</span>
-                    <button
-                      onClick={() => handleChange('blacklist', config.blacklist.filter(s => s !== symbol))}
-                      className="text-[#848e9c] hover:text-[#f84960] text-[11px] font-black transition-all"
-                    >✕</button>
-                  </div>
-                ))
-              )}
+        {/* Blacklist Items */}
+        <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+          {config.blacklist.length === 0 ? (
+            <div className="text-center py-2 text-[#848e9c] text-[9px] font-bold opacity-50">
+              No blacklisted coins
             </div>
-            
-            <div className="flex gap-2 pt-1">
-              <input
-                type="text" placeholder="SYMBOL (e.g. DOGE)" value={newBlacklistSymbol}
-                onChange={(e) => setNewBlacklistSymbol(e.target.value.toUpperCase().replace('USDT', ''))}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && newBlacklistSymbol && !config.blacklist.includes(newBlacklistSymbol)) {
-                    handleChange('blacklist', [...config.blacklist, newBlacklistSymbol]);
-                    setNewBlacklistSymbol('');
-                  }
-                }}
-                className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1.5 text-[10px] font-black text-white uppercase outline-none focus:border-[#fcd535]"
-              />
-              <button
-                onClick={() => {
-                  if (newBlacklistSymbol && !config.blacklist.includes(newBlacklistSymbol)) {
-                    handleChange('blacklist', [...config.blacklist, newBlacklistSymbol]);
-                    setNewBlacklistSymbol('');
-                  }
-                }}
-                className="bg-[#fcd535] text-black px-3 py-1.5 rounded text-[10px] font-black hover:bg-white transition-all shadow-md active:scale-95"
-              >ADD</button>
-            </div>
-          </div>
-        )}
+          ) : (
+            config.blacklist.map(symbol => (
+              <div key={symbol} className="flex items-center justify-between bg-[#0b0e11] px-2 py-1.5 rounded border border-[#2b3139] hover:border-[#f84960]/50 transition-all group">
+                <span className="text-[10px] font-black text-white uppercase">{symbol}</span>
+                <button
+                  onClick={() => handleChange('blacklist', config.blacklist.filter(s => s !== symbol))}
+                  className="text-[#848e9c] hover:text-[#f84960] text-[11px] font-black opacity-0 group-hover:opacity-100 transition-all"
+                  title="Remove from blacklist"
+                >
+                  ✕
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+        
+        {/* Add New */}
+        <div className="flex gap-2 pt-1">
+          <input
+            type="text"
+            placeholder="SYMBOL (e.g. DOGE)"
+            value={newBlacklistSymbol}
+            onChange={(e) => setNewBlacklistSymbol(e.target.value.toUpperCase().replace('USDT', ''))}
+            onKeyPress={(e) => {
+              if (e.key === 'Enter' && newBlacklistSymbol && !config.blacklist.includes(newBlacklistSymbol)) {
+                handleChange('blacklist', [...config.blacklist, newBlacklistSymbol]);
+                setNewBlacklistSymbol('');
+              }
+            }}
+            className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1.5 text-[10px] font-black text-white uppercase outline-none focus:border-[#fcd535] transition-all"
+          />
+          <button
+            onClick={() => {
+              if (newBlacklistSymbol && !config.blacklist.includes(newBlacklistSymbol)) {
+                handleChange('blacklist', [...config.blacklist, newBlacklistSymbol]);
+                setNewBlacklistSymbol('');
+              }
+            }}
+            className="bg-[#fcd535] text-black px-3 py-1.5 rounded text-[10px] font-black hover:bg-white transition-all shadow-md active:scale-95"
+          >
+            ADD
+          </button>
+        </div>
+        
+        <div className="text-[7px] text-[#848e9c] font-bold uppercase bg-black/20 rounded px-2 py-1 mt-1">
+          ⚠️ Blacklisted coins will be ignored for all signals
+        </div>
       </div>
 
       <button onClick={emergencyStop} className="w-full py-2 border border-[#f84960]/50 text-[#f84960] text-[9px] font-black uppercase rounded-lg hover:bg-[#f84960] hover:text-white transition-all">Emergency Liquidate All</button>
