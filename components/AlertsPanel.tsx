@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { TradingAlert, Position, SymbolData } from '../types';
 
@@ -53,19 +52,38 @@ const AlertsPanel: React.FC<Props> = ({
         </div>
         
         <div className="relative flex-1 min-w-[120px] max-w-[180px]">
-          <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[#848e9c] opacity-50">
+          {/* Search Icon */}
+          <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[#848e9c] opacity-50 pointer-events-none">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8"></circle>
               <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
             </svg>
           </div>
+
           <input 
             type="text"
             placeholder="Search Symbol..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setSearchTerm('');
+            }}
+            // px-7 ensures text doesn't overlap with icons on either side
             className="w-full bg-[#0b0e11]/80 border border-[#2b3139] rounded px-7 py-1 text-[10px] text-white placeholder-[#474d57] focus:border-[#fcd535]/50 outline-none transition-all font-black uppercase tracking-wider"
           />
+
+          {/* NEW FEATURE: Clear Button (X) */}
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-[#848e9c] hover:text-[#fcd535] transition-colors p-0.5"
+            >
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          )}
         </div>
 
         <span className={`text-[8px] px-1.5 py-0.5 rounded font-black transition-all ${eliteMode ? 'bg-purple-500 text-white shadow-[0_0_8px_rgba(168,85,247,0.3)]' : 'bg-[#00c076] text-black'}`}>
@@ -128,7 +146,7 @@ const AlertsPanel: React.FC<Props> = ({
                       </div>
                     ) : isWhaleAlert ? (
                       <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-[8px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 shadow-lg shadow-purple-500/30">
-                        🐋 {alert.whaleDetails?.score.toFixed(0) || 0}
+                        🐋 {alert.whaleDetails?.score?.toFixed(0) ?? 'N/A'}
                       </div>
                     ) : isPumpAlert && (
                       <div className="bg-[#fcd535] text-black text-[8px] font-black px-1.5 py-0.5 rounded flex items-center gap-1 animate-pulse">
@@ -143,7 +161,7 @@ const AlertsPanel: React.FC<Props> = ({
                     )}
                     
                     <div className={`text-[#474d57] transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>
-                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                     </div>
                   </div>
                 </div>
@@ -157,10 +175,10 @@ const AlertsPanel: React.FC<Props> = ({
                       <div className="mt-2 bg-cyan-500/5 rounded-lg p-2 border border-cyan-500/20 space-y-1 mb-2">
                         <div className="text-[9px] font-black text-cyan-400 uppercase border-b border-cyan-500/10 pb-1 mb-1">Trend Başlangıcı Tespit Edildi</div>
                         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                          <div className="flex justify-between text-[8px] font-black uppercase"><span className="text-[#848e9c]">Konsolidasyon:</span><span className="text-white">✅ {alert.trendDetails.consolidationRange}%</span></div>
-                          <div className="flex justify-between text-[8px] font-black uppercase"><span className="text-[#848e9c]">Breakout:</span><span className="text-white">✅ {alert.trendDetails.breakoutPercent}%</span></div>
-                          <div className="flex justify-between text-[8px] font-black uppercase"><span className="text-[#848e9c]">Hacim:</span><span className="text-white">✅ {alert.trendDetails.volumeRatio}x</span></div>
-                          <div className="flex justify-between text-[8px] font-black uppercase"><span className="text-[#848e9c]">Trend:</span><span className="text-white">✅ {alert.trendDetails.context}</span></div>
+                          <div className="flex justify-between text-[8px] font-black uppercase"><span className="text-[#848e9c]">Konsolidasyon:</span><span className="text-white">✅ {alert.trendDetails?.consolidationRange ?? 'N/A'}%</span></div>
+                          <div className="flex justify-between text-[8px] font-black uppercase"><span className="text-[#848e9c]">Breakout:</span><span className="text-white">✅ {alert.trendDetails?.breakoutPercent ?? 'N/A'}%</span></div>
+                          <div className="flex justify-between text-[8px] font-black uppercase"><span className="text-[#848e9c]">Hacim:</span><span className="text-white">✅ {alert.trendDetails?.volumeRatio ?? 'N/A'}x</span></div>
+                          <div className="flex justify-between text-[8px] font-black uppercase"><span className="text-[#848e9c]">Trend:</span><span className="text-white">✅ {alert.trendDetails?.context ?? 'N/A'}</span></div>
                         </div>
                       </div>
                     )}
@@ -201,7 +219,7 @@ const AlertsPanel: React.FC<Props> = ({
 
                         {/* Description */}
                         <div className="text-[8px] text-white/70 font-medium leading-relaxed bg-black/20 rounded px-2 py-1">
-                          {alert.whaleDetails.description}
+                          {alert.whaleDetails?.description ?? 'No description available'}
                         </div>
 
                         {/* Metrics Grid */}
@@ -248,13 +266,13 @@ const AlertsPanel: React.FC<Props> = ({
                     )}
 
                     <div className="flex items-center justify-between py-2">
-                       <div className="flex flex-col">
-                         <span className="text-[10px] font-black text-[#848e9c] uppercase tracking-tight mb-1">{alert.reason}</span>
-                         <span className="font-mono text-[14px] font-black text-white/90">${formatPrice(alert.price)}</span>
-                       </div>
-                       {(!isPumpAlert && !isTrendStartAlert) && (
-                         <div className="text-[#474d57] font-mono text-[10px] font-black">{formatTime(alert.timestamp)}</div>
-                       )}
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-[#848e9c] uppercase tracking-tight mb-1">{alert.reason}</span>
+                          <span className="font-mono text-[14px] font-black text-white/90">${formatPrice(alert.price)}</span>
+                        </div>
+                        {(!isPumpAlert && !isTrendStartAlert) && (
+                          <div className="text-[#474d57] font-mono text-[10px] font-black">{formatTime(alert.timestamp)}</div>
+                        )}
                     </div>
 
                     <div className="mt-2 flex gap-2">

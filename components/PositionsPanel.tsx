@@ -23,6 +23,12 @@ interface GroupedTrade {
   timestamp: number;
   closedAt: number;
   source: 'AUTO' | 'MANUAL';
+  entryTime: number;
+  tp1HitTime?: number;
+  tp2HitTime?: number;
+  trailingStartTime?: number;
+  slHitTime?: number;
+  exitTime: number;
 }
 
 const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, marketData, onSelectSymbol }) => {
@@ -38,6 +44,22 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
   }, []);
 
   const formatPrice = (p: number) => p.toFixed(p < 0.01 ? 8 : p < 1 ? 6 : 4).replace(/\.?0+$/, '');
+  
+  const formatTime = (timestamp: number) => {
+    return new Date(timestamp).toLocaleTimeString('en-US', { 
+      hour12: false, 
+      hour: '2-digit', 
+      minute: '2-digit', 
+      second: '2-digit' 
+    });
+  };
+
+  const formatDuration = (startMs: number, endMs: number) => {
+    const diffMs = endMs - startMs;
+    const minutes = Math.floor(diffMs / 60000);
+    const seconds = Math.floor((diffMs % 60000) / 1000);
+    return `${minutes}m ${seconds}s`;
+  };
   
   const FEE_RATE = 0.0005;
 
@@ -76,15 +98,32 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
           partials: [],
           timestamp: item.timestamp,
           closedAt: item.closedAt,
-          source: item.source
+          source: item.source,
+          entryTime: item.timestamp,
+          exitTime: item.closedAt,
         };
       }
       
       groups[baseId].partials.push(item);
       groups[baseId].totalPnl += item.pnl;
+      
+      if (item.tp1HitTime && !groups[baseId].tp1HitTime) {
+        groups[baseId].tp1HitTime = item.tp1HitTime;
+      }
+      if (item.tp2HitTime && !groups[baseId].tp2HitTime) {
+        groups[baseId].tp2HitTime = item.tp2HitTime;
+      }
+      if (item.reason.includes('TRAILING')) {
+        groups[baseId].trailingStartTime = item.closedAt;
+      }
+      if (item.reason.includes('STOP LOSS')) {
+        groups[baseId].slHitTime = item.closedAt;
+      }
+      
       if (item.closedAt >= groups[baseId].closedAt) {
         groups[baseId].finalExitPrice = item.exitPrice;
         groups[baseId].closedAt = item.closedAt;
+        groups[baseId].exitTime = item.closedAt;
         groups[baseId].status = item.reason;
       }
     });
@@ -98,7 +137,7 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
   }, [history, searchQuery]);
 
   const exportToCSV = () => {
-    const headers = ["Asset", "Type", "Side", "Leverage", "Entry", "Final Exit", "Total PNL (USDT)", "Total ROI (%)", "Status", "Date"];
+    const headers = ["Asset", "Type", "Side", "Leverage", "Entry", "Final Exit", "Total PNL (USDT)", "Total ROI (%)", "Status", "Entry Time", "Exit Time", "Duration"];
     const rows = groupedTrades.map(trade => [
       trade.symbol,
       trade.source,
@@ -109,7 +148,9 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
       trade.totalPnl.toFixed(2),
       trade.totalRoi.toFixed(2),
       trade.status,
-      new Date(trade.closedAt).toLocaleString()
+      formatTime(trade.entryTime),
+      formatTime(trade.exitTime),
+      formatDuration(trade.entryTime, trade.exitTime)
     ]);
 
     const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
@@ -136,7 +177,7 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
         {parts.map((part, i) => {
           let style = "bg-[#fcd535]/10 text-[#fcd535] border border-[#fcd535]/20";
           if (part.includes('TP1') || part.includes('TP2') || part === 'PERFECT') style = "bg-[#00c076]/10 text-[#00c076] border border-[#00c076]/20";
-          else if (part === 'SL' || part === 'LOSS') style = "bg-[#f84960]/10 text-[#f84960] border border-[#f84960]/20";
+          else if (part === 'SL' || part === 'LOSS' || part.includes('STOP')) style = "bg-[#f84960]/10 text-[#f84960] border border-[#f84960]/20";
           return <span key={i} className={`text-[8px] px-1.5 py-0.5 rounded font-black whitespace-nowrap uppercase ${style}`}>{part}</span>;
         })}
       </div>
@@ -148,15 +189,23 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
     const isLong = pos.side === 'LONG';
 
     if (pos.trailingStopActive) {
-      const trailingRange = Math.abs(pos.maxPrice - pos.stopLoss);
+      const trailingRange = Math.abs(pos.highestPrice - pos.stopLoss);
       const currentDist = isLong ? currentPrice - pos.stopLoss : pos.stopLoss - currentPrice;
       const currentPercent = trailingRange > 0 ? (Math.abs(currentDist) / trailingRange) * 100 : 0;
 
       return (
         <div className="relative w-full h-3 bg-[#0b0e11] rounded-lg overflow-hidden shadow-inner border border-[#2b3139]">
-          <div className="absolute h-full bg-gradient-to-r from-green-600 via-green-400 to-[#fcd535] transition-all duration-500" style={{ width: `${Math.min(100, currentPercent)}%` }} />
-          <div className="absolute h-full w-1 bg-white shadow-lg z-10" style={{ left: `${Math.min(100, currentPercent)}%` }} />
-          <div className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-white mix-blend-difference">TRAILING {currentPercent.toFixed(0)}%</div>
+          <div 
+            className="absolute h-full bg-gradient-to-r from-green-600 via-green-400 to-[#fcd535] transition-all duration-500" 
+            style={{ width: `${Math.min(100, currentPercent)}%` }} 
+          />
+          <div 
+            className="absolute h-full w-1 bg-white shadow-lg z-10" 
+            style={{ left: `${Math.min(100, currentPercent)}%` }} 
+          />
+          <div className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-white mix-blend-difference">
+            TRAILING {currentPercent.toFixed(0)}%
+          </div>
           <div className="absolute right-0 h-full w-0.5 bg-yellow-300 opacity-50" />
         </div>
       );
@@ -172,15 +221,32 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
     const tp2Percent = totalRange > 0 ? (tp1ToTP2 / totalRange) * 100 : 0;
 
     const currentDist = isLong ? currentPrice - pos.stopLoss : pos.stopLoss - currentPrice;
-    const currentPercent = totalRange > 0 ? (Math.abs(currentDist) / totalRange) * 100 : 0;
+    const currentPercent = totalRange > 0 ? (currentDist / totalRange) * 100 : 0;
 
     return (
       <div className="relative w-full h-3 bg-[#0b0e11] rounded-lg overflow-hidden shadow-inner border border-[#2b3139]">
-        <div className="absolute h-full bg-gradient-to-r from-red-600 to-red-500" style={{ width: `${slPercent}%` }} />
-        <div className="absolute h-full bg-gradient-to-r from-yellow-500 to-yellow-400" style={{ left: `${slPercent}%`, width: `${tp1Percent}%` }} />
-        <div className="absolute h-full bg-gradient-to-r from-green-500 to-green-400" style={{ left: `${slPercent + tp1Percent}%`, width: `${tp2Percent}%` }} />
-        <div className="absolute h-full w-1 bg-white shadow-lg z-20" style={{ left: `${Math.min(100, currentPercent)}%` }} />
-        {pos.tp1Hit && <div className="absolute top-0 bottom-0 w-0.5 bg-white/50 z-10" style={{ left: `${slPercent + tp1Percent}%` }} />}
+        <div 
+          className="absolute h-full bg-gradient-to-r from-red-600 to-red-500" 
+          style={{ width: `${slPercent}%` }} 
+        />
+        <div 
+          className="absolute h-full bg-gradient-to-r from-yellow-500 to-yellow-400" 
+          style={{ left: `${slPercent}%`, width: `${tp1Percent}%` }} 
+        />
+        <div 
+          className="absolute h-full bg-gradient-to-r from-green-500 to-green-400" 
+          style={{ left: `${slPercent + tp1Percent}%`, width: `${tp2Percent}%` }} 
+        />
+        <div 
+          className="absolute h-full w-1 bg-white shadow-lg z-20" 
+          style={{ left: `${Math.max(0, Math.min(100, currentPercent))}%` }} 
+        />
+        {pos.tp1Hit && (
+          <div 
+            className="absolute top-0 bottom-0 w-0.5 bg-white/50 z-10" 
+            style={{ left: `${slPercent + tp1Percent}%` }} 
+          />
+        )}
       </div>
     );
   };
@@ -235,7 +301,7 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
       
       <div className="flex-1 overflow-y-auto custom-scrollbar bg-[#0b0e11] print:bg-white">
         {activeTab === 'active' ? (
-          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3 print:hidden">
+          <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 print:hidden">
             {positions.length === 0 && (
               <div className="col-span-full py-12 flex flex-col items-center justify-center opacity-30">
                 <span className="text-4xl mb-4">⚓</span>
@@ -255,25 +321,24 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
               return (
                 <div key={pos.id} onClick={() => onSelectSymbol?.(pos.symbol)} className={`bg-[#1e2329]/40 border ${pos.trailingStopActive ? 'border-[#fcd535]/40 shadow-[0_0_20px_rgba(252,213,53,0.1)]' : pos.tp1Hit ? 'border-[#00c076]/40 shadow-[0_0_20px_rgba(0,192,118,0.1)]' : isProfit ? 'border-[#00c076]/20' : 'border-[#f84960]/20'} rounded-xl p-3 hover:border-[#fcd535]/40 transition-all cursor-pointer group relative overflow-hidden`}>
                   
-                  {/* HEADER: Symbol, Side, PNL */}
-                  <div className="flex justify-between items-start mb-1.5">
+                  <div className="flex justify-between items-start mb-2">
                     <div className="flex items-center gap-2">
-                      <span className="text-lg font-black text-white group-hover:text-[#fcd535] transition-colors leading-none uppercase">
+                      <span className="text-xl font-black text-white group-hover:text-[#fcd535] transition-colors leading-none uppercase">
                         {pos.symbol.replace('USDT','')}
                       </span>
                       <div className="flex flex-col gap-0.5">
-                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded leading-none ${
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded leading-none ${
                           isLong ? 'bg-[#00c076]/20 text-[#00c076]' : 'bg-[#f84960]/20 text-[#f84960]'
                         }`}>
                           {pos.side} {pos.leverage}X
                         </span>
-                        <span className={`text-[7px] font-black px-1 py-0.25 rounded text-center border leading-none ${
+                        <span className={`text-[8px] font-black px-1 py-0.25 rounded text-center border leading-none ${
                           pos.source === 'AUTO' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
                         }`}>
                           {pos.source}
                         </span>
                         {pos.alertType && (
-                          <span className="text-[6px] font-black px-1 py-0.25 rounded text-center bg-[#fcd535]/10 text-[#fcd535] border border-[#fcd535]/20 leading-none truncate max-w-[80px]">
+                          <span className="text-[7px] font-black px-1 py-0.25 rounded text-center bg-[#fcd535]/10 text-[#fcd535] border border-[#fcd535]/20 leading-none truncate max-w-[80px]">
                             {pos.alertType === 'WHALE_ACCUMULATION' && '🐋 WHALE'}
                             {pos.alertType === 'INSTITUTION_ENTRY' && '🏛️ INST'}
                             {pos.alertType === 'TREND_START' && '🚀 TREND'}
@@ -283,39 +348,65 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className={`text-lg font-mono font-black ${isProfit ? 'text-[#00c076]' : 'text-[#f84960]'}`}>
+                      <div className={`text-xl font-mono font-black ${isProfit ? 'text-[#00c076]' : 'text-[#f84960]'}`}>
                         {isProfit ? '+' : ''}{livePnlNet.toFixed(2)}
                       </div>
-                      <div className={`text-[9px] font-black leading-none ${isProfit ? 'text-[#00c076]' : 'text-[#f84960]'}`}>
+                      <div className={`text-[10px] font-black leading-none ${isProfit ? 'text-[#00c076]' : 'text-[#f84960]'}`}>
                         {liveRoi.toFixed(2)}% ROI
                       </div>
-                      <div className="text-[8px] text-[#848e9c] font-mono mt-0.5">
-                        Entry: ${formatPrice(pos.entryPrice)} · {new Date(pos.timestamp).toLocaleTimeString('en-US', { hour12: false })}
+                      <div className="text-[9px] text-[#848e9c] font-mono mt-0.5">
+                        Entry: ${formatPrice(pos.entryPrice)}
+                      </div>
+                      <div className="text-[8px] text-[#fcd535] font-mono">
+                        {formatTime(pos.actualEntryTime || pos.timestamp)}
                       </div>
                     </div>
                   </div>
 
-                  {/* TP STATUS BADGES */}
-                  <div className="flex items-center gap-1.5 mb-2">
-                    <div className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${pos.tp1Hit ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
-                      <span>{pos.tp1Hit ? '✓' : '○'}</span>
-                      <span>TP1</span>
-                    </div>
-                    <div className={`flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${pos.tp2Hit ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
-                      <span>{pos.tp2Hit ? '✓' : '○'}</span>
-                      <span>TP2</span>
-                    </div>
-                    {pos.trailingStopActive && (
-                      <div className="flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-[#fcd535]/20 text-[#fcd535] font-black uppercase animate-pulse border border-[#fcd535]/30">
-                        <span>🎯</span>
-                        <span>TRAIL</span>
+                  <div className="mb-2 space-y-1">
+                    <div className="flex items-center gap-1.5">
+                      <div className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded font-black uppercase ${pos.tp1Hit ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
+                        <span>{pos.tp1Hit ? '✓' : '○'}</span>
+                        <span>TP1</span>
                       </div>
-                    )}
+                      
+                      <div className={`flex items-center gap-1 text-[10px] px-2 py-1 rounded font-black uppercase ${pos.tp2Hit ? 'bg-green-500/20 text-green-400' : 'bg-gray-700 text-gray-400'}`}>
+                        <span>{pos.tp2Hit ? '✓' : '○'}</span>
+                        <span>TP2</span>
+                      </div>
+                      
+                      {pos.trailingStopActive && (
+                        <div className="flex items-center gap-1 text-[10px] px-2 py-1 rounded bg-[#fcd535]/20 text-[#fcd535] font-black uppercase animate-pulse border border-[#fcd535]/30">
+                          <span>🎯</span>
+                          <span>TRAIL</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col gap-0.5 text-[8px] font-mono text-[#848e9c]">
+                      {pos.tp1Hit && pos.tp1HitTime && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-green-400">✓ TP1:</span>
+                          <span>{formatTime(pos.tp1HitTime)}</span>
+                        </div>
+                      )}
+                      {pos.tp2Hit && pos.tp2HitTime && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-green-400">✓ TP2:</span>
+                          <span>{formatTime(pos.tp2HitTime)}</span>
+                        </div>
+                      )}
+                      {pos.trailingStopActive && pos.trailingStartTime && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-[#fcd535]">🎯 Trail:</span>
+                          <span>{formatTime(pos.trailingStartTime)}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* QUANTITY INFO */}
-                  <div className="text-[9px] text-gray-400 mb-2 space-y-0.5">
-                    <div className="flex justify-between text-[9px] font-black uppercase">
+                  <div className="text-[10px] text-gray-400 mb-2 space-y-0.5">
+                    <div className="flex justify-between text-[10px] font-black uppercase">
                       <span className="text-[#848e9c]">QUANTITY:</span>
                       <span className="text-green-400 font-mono">
                         ({((pos.quantity / pos.initialQuantity) * 100).toFixed(0)}%)
@@ -323,22 +414,21 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                     </div>
                     
                     {pos.partialCloses.tp1 > 0 && (
-                      <div className="flex justify-between text-[8px] text-gray-500 font-bold uppercase italic">
+                      <div className="flex justify-between text-[9px] text-gray-500 font-bold uppercase italic">
                         <span>Closed at TP1:</span>
                         <span>{pos.partialCloses.tp1.toFixed(4)} (-40%)</span>
                       </div>
                     )}
                     {pos.partialCloses.tp2 > 0 && (
-                      <div className="flex justify-between text-[8px] text-gray-500 font-bold uppercase italic">
+                      <div className="flex justify-between text-[9px] text-gray-500 font-bold uppercase italic">
                         <span>Closed at TP2:</span>
                         <span>{pos.partialCloses.tp2.toFixed(4)} (-30%)</span>
                       </div>
                     )}
                   </div>
 
-                  {/* STOP LOSS & TP INFO */}
                   <div className="space-y-1 mb-2">
-                    <div className="flex items-center gap-2 text-[9px] font-black uppercase">
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase">
                       <span className="text-[#848e9c]">CURRENT STOP:</span>
                       <span className="text-[#f84960] font-mono flex items-center gap-1">
                         ${formatPrice(pos.stopLoss)}
@@ -347,7 +437,7 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                     </div>
 
                     {!pos.trailingStopActive && (
-                      <div className="flex items-center gap-2 text-[9px] font-black uppercase">
+                      <div className="flex items-center gap-2 text-[10px] font-black uppercase">
                         <span className="text-[#848e9c]">TP2 TARGET:</span>
                         <span className="text-[#00c076] font-mono">
                           ${formatPrice(pos.tp2)}
@@ -356,13 +446,13 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                     )}
                   </div>
 
-                  {/* RISK BAR */}
                   <div className="mb-2">
                     {getRiskBar(pos)}
                   </div>
 
-                  {/* CLOSE BUTTON */}
-                  <button onClick={(e) => { e.stopPropagation(); onManualClose(pos.id); }} className="w-full py-1.5 bg-[#f84960]/10 border border-[#f84960]/30 rounded-lg text-[#f84960] text-[9px] font-black uppercase hover:bg-[#f84960] hover:text-white transition-all">Liquidate Remainder</button>
+                  <button onClick={(e) => { e.stopPropagation(); onManualClose(pos.id); }} className="w-full py-2 bg-[#f84960]/10 border border-[#f84960]/30 rounded-lg text-[#f84960] text-[10px] font-black uppercase hover:bg-[#f84960] hover:text-white transition-all">
+                    Liquidate Remainder
+                  </button>
                 </div>
               );
             })}
@@ -440,25 +530,82 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                         </div>
 
                         <div className="col-span-1 text-right text-[9px] text-[#474d57] font-sans">
-                          {new Date(trade.closedAt).toLocaleTimeString('en-US', { hour12: false })}
+                          {formatTime(trade.closedAt)}
                         </div>
                       </div>
 
                       {isExpanded && (
                         <div className="bg-black/20 border-t border-white/5 p-4 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                          <div className="space-y-2">
-                            {trade.partials.map((p, idx) => (
-                              <div key={p.id} className="flex items-center gap-4 text-[10px] text-[#848e9c] font-medium border-l-2 border-white/5 pl-4 py-1 hover:bg-white/5 rounded transition-colors">
-                                <span className="w-24 font-black uppercase text-[#fcd535]">{p.reason}</span>
-                                <span className="w-40 font-mono">${formatPrice(p.entryPrice)} → ${formatPrice(p.exitPrice)}</span>
-                                <span className={`w-20 font-black font-mono ${p.pnl >= 0 ? 'text-[#00c076]' : 'text-[#f84960]'}`}>
-                                  {p.pnl >= 0 ? '+' : ''}{p.pnl.toFixed(2)}
-                                </span>
-                                <span className="w-32">QTY: {p.quantity.toFixed(4)}</span>
-                                <span className={`w-20 font-black ${p.pnl >= 0 ? 'text-[#00c076]' : 'text-[#f84960]'}`}>{p.pnlPercent.toFixed(2)}% ROI</span>
-                                <span className="ml-auto text-[8px] opacity-60 font-sans">{new Date(p.closedAt).toLocaleTimeString()}</span>
+                          
+                          <div className="flex items-center justify-between bg-[#1e2329]/50 p-3 rounded-lg border border-white/5">
+                            <div className="flex items-center gap-6">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] font-black text-green-400 uppercase">📍 ENTRY:</span>
+                                <span className="text-white font-mono font-black text-[11px]">{formatTime(trade.entryTime)}</span>
+                                <span className="text-[#848e9c] text-[9px]">@ ${formatPrice(trade.entryPrice)}</span>
                               </div>
-                            ))}
+                              
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[9px] font-black uppercase ${trade.slHitTime ? 'text-red-400' : 'text-blue-400'}`}>
+                                  🏁 EXIT:
+                                </span>
+                                <span className="text-white font-mono font-black text-[11px]">{formatTime(trade.exitTime)}</span>
+                                <span className="text-[#848e9c] text-[9px]">@ ${formatPrice(trade.finalExitPrice)}</span>
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <span className="text-[9px] font-black text-[#fcd535] uppercase">⏱️ DURATION:</span>
+                                <span className="text-white font-mono font-black text-[11px]">
+                                  {formatDuration(trade.entryTime, trade.exitTime)}
+                                </span>
+                              </div>
+                            </div>
+                            
+                            <div className="text-[8px] text-[#474d57] font-black uppercase tracking-widest">
+                              {trade.status}
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <div className="text-[9px] font-black text-[#848e9c] uppercase border-b border-white/5 pb-1">
+                              📊 Trade Executions
+                            </div>
+                            
+                            {trade.partials.map((p, idx) => {
+                              const timeFromEntry = Math.floor((p.closedAt - trade.entryTime) / 60000);
+                              
+                              return (
+                                <div key={p.id} className="grid grid-cols-12 gap-2 items-center text-[10px] text-[#848e9c] font-medium border-l-2 border-white/5 pl-4 py-2 hover:bg-white/5 rounded transition-colors">
+                                  <span className="col-span-2 font-black uppercase text-[#fcd535] text-[9px]">
+                                    {p.reason}
+                                  </span>
+                                  
+                                  <span className="col-span-2 font-mono text-[9px] text-white">
+                                    ⏰ {formatTime(p.closedAt)}
+                                  </span>
+                                  
+                                  <span className="col-span-1 text-[9px] text-green-400">
+                                    +{timeFromEntry}m
+                                  </span>
+                                  
+                                  <span className="col-span-3 font-mono text-[9px]">
+                                    ${formatPrice(p.entryPrice)} → ${formatPrice(p.exitPrice)}
+                                  </span>
+                                  
+                                  <span className={`col-span-1 font-black font-mono text-[10px] ${p.pnl >= 0 ? 'text-[#00c076]' : 'text-[#f84960]'}`}>
+                                    {p.pnl >= 0 ? '+' : ''}{p.pnl.toFixed(2)}
+                                  </span>
+                                  
+                                  <span className="col-span-2 text-[9px]">
+                                    QTY: {p.quantity.toFixed(4)}
+                                  </span>
+                                  
+                                  <span className={`col-span-1 font-black text-[9px] ${p.pnl >= 0 ? 'text-[#00c076]' : 'text-[#f84960]'}`}>
+                                    {p.pnlPercent.toFixed(2)}%
+                                  </span>
+                                </div>
+                              );
+                            })}
                           </div>
                           
                           <div className="flex items-center justify-between pt-3 border-t border-white/5 mt-2 bg-white/5 p-3 rounded-lg">
@@ -472,9 +619,6 @@ const PositionsPanel: React.FC<Props> = ({ positions, history, onManualClose, ma
                                   ({isProfit ? '+' : ''}{trade.totalRoi.toFixed(2)}% ROI)
                                 </span>
                               </div>
-                            </div>
-                            <div className="text-[8px] text-[#474d57] font-black uppercase tracking-widest">
-                              Duration: {Math.floor((trade.closedAt - trade.timestamp) / 60000)} min
                             </div>
                           </div>
                         </div>

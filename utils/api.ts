@@ -59,43 +59,53 @@ const FUTURES_API = '/binance-futures'; // -> https://fapi.binance.com
 export async function fetchKlines(
   symbol: string,
   interval: '1m' | '5m' | '15m' | '1h',
-  limit: number = 50
+  limit: number = 50,
+  retries: number = 3 // 🔧 YENİ: Retry sayısı
 ): Promise<Kline[]> {
   const startTime = Date.now();
 
-  try {
-    console.log(`[API] 📊 Fetching ${limit} ${interval} klines for ${symbol}...`);
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const url = `${FUTURES_API}/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
+      const response = await fetch(url, {
+        signal: AbortSignal.timeout(15000) // 🔧 15 saniye timeout
+      });
 
-    // Futures klines kullan (daha fazla veri)
-    const url = `${FUTURES_API}/fapi/v1/klines?symbol=${symbol}&interval=${interval}&limit=${limit}`;
-    const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      const data: number[][] = await response.json();
+      const klines: Kline[] = data.map((k) => ({
+        openTime: k[0],
+        open: parseFloat(String(k[1])),
+        high: parseFloat(String(k[2])),
+        low: parseFloat(String(k[3])),
+        close: parseFloat(String(k[4])),
+        volume: parseFloat(String(k[5])),
+        closeTime: k[6],
+        quoteVolume: parseFloat(String(k[7])),
+        trades: parseInt(String(k[8]))
+      }));
+
+      const duration = Date.now() - startTime;
+      return klines;
+
+    } catch (error: any) {
+      // 🔧 Son deneme değilse tekrar dene
+      if (attempt < retries) {
+        console.warn(`[API] ⚠️ ${symbol} ${interval} timeout, retrying (${attempt}/${retries})...`);
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt)); // Exponential backoff
+        continue;
+      }
+      
+      // 🔧 Son denemede de başarısızsa error
+      console.error(`[API] ❌ Failed to fetch klines for ${symbol} after ${retries} attempts:`, error);
+      return [];
     }
-
-    const data: number[][] = await response.json();
-
-    const klines: Kline[] = data.map((k) => ({
-      openTime: k[0],
-      open: parseFloat(String(k[1])),
-      high: parseFloat(String(k[2])),
-      low: parseFloat(String(k[3])),
-      close: parseFloat(String(k[4])),
-      volume: parseFloat(String(k[5])),
-      closeTime: k[6],
-      quoteVolume: parseFloat(String(k[7])),
-      trades: parseInt(String(k[8]))
-    }));
-
-    const duration = Date.now() - startTime;
-    console.log(`[API] ✅ ${symbol} ${interval} klines fetched: ${klines.length} candles (${duration}ms)`);
-
-    return klines;
-  } catch (error) {
-    console.error(`[API] ❌ Failed to fetch klines for ${symbol}:`, error);
-    return [];
   }
+
+  return [];
 }
 
 /**
@@ -110,7 +120,7 @@ export async function fetchRecentTrades(
   const startTime = Date.now();
 
   try {
-    console.log(`[API] 💰 Fetching ${limit} recent trades for ${symbol}...`);
+    //console.log(`[API] 💰 Fetching ${limit} recent trades for ${symbol}...`);
 
     const url = `${FUTURES_API}/fapi/v1/trades?symbol=${symbol}&limit=${limit}`;
     const response = await fetch(url);
@@ -131,7 +141,7 @@ export async function fetchRecentTrades(
     }));
     
     const duration = Date.now() - startTime;
-    console.log(`[API] ✅ ${symbol} recent trades fetched: ${trades.length} trades (${duration}ms)`);
+   // console.log(`[API] ✅ ${symbol} recent trades fetched: ${trades.length} trades (${duration}ms)`);
 
     return trades;
   } catch (error) {
@@ -148,7 +158,7 @@ export async function fetchOpenInterest(
   symbol: string
 ): Promise<{ openInterest: number; time: number } | null> {
   try {
-    console.log(`[API] 📈 Fetching Open Interest for ${symbol}...`);
+    //console.log(`[API] 📈 Fetching Open Interest for ${symbol}...`);
 
     const url = `${FUTURES_API}/fapi/v1/openInterest?symbol=${symbol}`;
     const response = await fetch(url);
@@ -164,7 +174,7 @@ export async function fetchOpenInterest(
       time: data.time
     };
 
-    console.log(`[API] ✅ ${symbol} OI: ${result.openInterest.toFixed(2)}`);
+    //console.log(`[API] ✅ ${symbol} OI: ${result.openInterest.toFixed(2)}`);
 
     return result;
   } catch (error) {
@@ -181,7 +191,7 @@ export async function fetchFundingRate(
   symbol: string
 ): Promise<{ fundingRate: number; nextFundingTime: number } | null> {
   try {
-    console.log(`[API] 💸 Fetching Funding Rate for ${symbol}...`);
+   // console.log(`[API] 💸 Fetching Funding Rate for ${symbol}...`);
 
     const url = `${FUTURES_API}/fapi/v1/premiumIndex?symbol=${symbol}`;
     const response = await fetch(url);
@@ -198,7 +208,7 @@ export async function fetchFundingRate(
     };
 
     const fundingPct = (result.fundingRate * 100).toFixed(4);
-    console.log(`[API] ✅ ${symbol} Funding Rate: ${fundingPct}%`);
+    //console.log(`[API] ✅ ${symbol} Funding Rate: ${fundingPct}%`);
 
     return result;
   } catch (error) {
@@ -228,7 +238,7 @@ export async function fetchAggTrades(
   const startTime = Date.now();
 
   try {
-    console.log(`[API] 🐋 Fetching ${limit} aggregate trades for ${symbol}...`);
+    //console.log(`[API] 🐋 Fetching ${limit} aggregate trades for ${symbol}...`);
 
     const url = `${FUTURES_API}/fapi/v1/aggTrades?symbol=${symbol}&limit=${limit}`;
     const response = await fetch(url);
@@ -256,7 +266,7 @@ export async function fetchAggTrades(
     const avgSize = trades.reduce((sum: number, t: any) => sum + t.quoteQty, 0) / trades.length;
     const largeTrades = trades.filter((t: any) => t.quoteQty > avgSize * 5);
     
-    console.log(`[API] ✅ ${symbol} aggTrades: ${trades.length} trades, ${largeTrades.length} large (${duration}ms)`);
+    //console.log(`[API] ✅ ${symbol} aggTrades: ${trades.length} trades, ${largeTrades.length} large (${duration}ms)`);
 
     return trades;
   } catch (error) {
@@ -281,7 +291,7 @@ export async function fetchOrderBook(
   imbalance: number;
 } | null> {
   try {
-    console.log(`[API] 📚 Fetching order book for ${symbol} (depth: ${limit})...`);
+    //console.log(`[API] 📚 Fetching order book for ${symbol} (depth: ${limit})...`);
 
     const url = `${FUTURES_API}/fapi/v1/depth?symbol=${symbol}&limit=${limit}`;
     const response = await fetch(url);
@@ -306,7 +316,7 @@ export async function fetchOrderBook(
     const askTotal = asks.reduce((sum: number, a: any) => sum + a.qty, 0);
     const imbalance = bidTotal / (askTotal || 1);
 
-    console.log(`[API] ✅ ${symbol} Order Book - Bid: ${bidTotal.toFixed(2)}, Ask: ${askTotal.toFixed(2)}, Imbalance: ${imbalance.toFixed(2)}x`);
+    //console.log(`[API] ✅ ${symbol} Order Book - Bid: ${bidTotal.toFixed(2)}, Ask: ${askTotal.toFixed(2)}, Imbalance: ${imbalance.toFixed(2)}x`);
 
     return { bids, asks, bidTotal, askTotal, imbalance };
   } catch (error) {
@@ -316,7 +326,7 @@ export async function fetchOrderBook(
 }
 
 /**
- * Tüm verileri paralel olarak çeker (optimize edilmiş)
+ * 🔧 FIXED: Tüm verileri paralel olarak çeker (15m limit: 16 → 30)
  * @param symbol - BTCUSDT, ETHUSDT vb.
  */
 export async function fetchAllData(symbol: string): Promise<{
@@ -339,7 +349,7 @@ export async function fetchAllData(symbol: string): Promise<{
     const [klines1m, klines5m, klines15m, recentTrades, aggTrades, orderBook, oiData, fundingData] = await Promise.all([
       fetchKlines(symbol, '1m', 60),   // Son 60 dakika
       fetchKlines(symbol, '5m', 24),   // Son 2 saat
-      fetchKlines(symbol, '15m', 16),  // Son 4 saat
+      fetchKlines(symbol, '15m', 30),  // 🔧 FIXED: 16 → 30 (EMA 21 için yeterli)
       fetchRecentTrades(symbol, 200),
       fetchAggTrades(symbol, 500),
       fetchOrderBook(symbol, 20),
@@ -356,15 +366,15 @@ export async function fetchAllData(symbol: string): Promise<{
       console.warn(`[API] ⚠️ ${symbol} - Insufficient data (possibly restricted or not available on Futures)`);
     } else {
       console.log(`[API] ✅ ${symbol} ALL data fetched in ${fetchTime}ms`);
-      console.log(`[API] 📊 Data summary:`);
-      console.log(`  - 1m klines: ${klines1m.length}`);
-      console.log(`  - 5m klines: ${klines5m.length}`);
-      console.log(`  - 15m klines: ${klines15m.length}`);
-      console.log(`  - Recent trades: ${recentTrades.length}`);
-      console.log(`  - Aggregate trades: ${aggTrades.length}`);
-      console.log(`  - Order book imbalance: ${orderBook?.imbalance?.toFixed(2) || 'N/A'}x`);
-      console.log(`  - Open Interest: ${oiData?.openInterest?.toFixed(2) || 'N/A'}`);
-      console.log(`  - Funding Rate: ${fundingData?.fundingRate ? (fundingData.fundingRate * 100).toFixed(4) + '%' : 'N/A'}`);
+      // console.log(`[API] 📊 Data summary:`);
+      // console.log(`  - 1m klines: ${klines1m.length}`);
+      // console.log(`  - 5m klines: ${klines5m.length}`);
+      // console.log(`  - 15m klines: ${klines15m.length}`); // 🎯 Artık 30 olmalı
+      // console.log(`  - Recent trades: ${recentTrades.length}`);
+      // console.log(`  - Aggregate trades: ${aggTrades.length}`);
+      // console.log(`  - Order book imbalance: ${orderBook?.imbalance?.toFixed(2) || 'N/A'}x`);
+      // console.log(`  - Open Interest: ${oiData?.openInterest?.toFixed(2) || 'N/A'}`);
+      // console.log(`  - Funding Rate: ${fundingData?.fundingRate ? (fundingData.fundingRate * 100).toFixed(4) + '%' : 'N/A'}`);
     }
 
     return {
