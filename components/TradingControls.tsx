@@ -12,11 +12,13 @@ interface Props {
   onRemoveBlacklist?: (symbol: string) => void;
 }
 
-const TradingControls: React.FC<Props> = ({ config, setConfig, account, marketData, positions, emergencyStop, onManualTrade, onRemoveBlacklist }) => {
+const TradingControls: React.FC<Props> = ({ config, setConfig, account, marketData, positions, emergencyStop, onManualTrade }) => {
   const [isManualExpanded, setIsManualExpanded] = useState(false);
+  const [isBotSettingsExpanded, setIsBotSettingsExpanded] = useState(true);  // 🔧 YENİ
+  const [isBlacklistExpanded, setIsBlacklistExpanded] = useState(false);     // 🔧 YENİ
   const [manualSymbol, setManualSymbol] = useState('');
   const [manualSide, setManualSide] = useState<Side>('LONG');
-  const [newBlacklistSymbol, setNewBlacklistSymbol] = useState('');  // 🔧 YENİ
+  const [newBlacklistSymbol, setNewBlacklistSymbol] = useState('');
 
   const handleChange = (key: keyof StrategyConfig, value: any) => {
     setConfig(prev => ({ ...prev, [key]: value }));
@@ -42,17 +44,12 @@ const TradingControls: React.FC<Props> = ({ config, setConfig, account, marketDa
     });
 
     const netLiveUnrealized = liveUnrealizedPnl - estimatedExitFees;
-
-    // 🔹 Equity hesaplama: balance + pozisyonlar + net PnL
     const currentEquity = account.balance + totalMarginInTrades + netLiveUnrealized;
-
-    // 🔹 Session profit ve live growth
     const profit = currentEquity - account.initialBalance;
     const growthPct = (profit / account.initialBalance) * 100;
 
     return { totalEquity: currentEquity, sessionProfit: profit, sessionGrowthPct: growthPct };
-}, [account, positions, marketData]);
-
+  }, [account, positions, marketData]);
 
   const isProfitable = sessionProfit >= 0;
 
@@ -142,7 +139,6 @@ const TradingControls: React.FC<Props> = ({ config, setConfig, account, marketDa
                 WHALE MODE: Büyük emirler ve order book dengesizliği takip ediliyor.
              </div>
              
-             {/* Whale Settings */}
              <div className="grid grid-cols-3 gap-2 px-2">
                <div className="space-y-1">
                  <label className="text-[8px] font-black text-purple-400 uppercase flex items-center gap-1">
@@ -198,162 +194,184 @@ const TradingControls: React.FC<Props> = ({ config, setConfig, account, marketDa
         )}
       </div>
 
+      {/* 🔧 COLLAPSIBLE: BOT SETTINGS */}
       <div className="space-y-3 bg-[#1e2329]/50 p-4 rounded-xl border border-[#2b3139]">
-        <div className="text-[10px] font-black text-[#fcd535] uppercase tracking-widest border-b border-[#2b3139] pb-2 mb-2">Bot Settings</div>
-        <div className="grid grid-cols-2 gap-2">
-          <button onClick={() => handleChange('longEnabled', !config.longEnabled)} className={`py-2 rounded text-[10px] font-black border transition-all ${config.longEnabled ? 'bg-[#00c076]/20 border-[#00c076] text-[#00c076]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}>LONG {config.longEnabled ? 'ON' : 'OFF'}</button>
-          <button onClick={() => handleChange('shortEnabled', !config.shortEnabled)} className={`py-2 rounded text-[10px] font-black border transition-all ${config.shortEnabled ? 'bg-[#f84960]/20 border-[#f84960] text-[#f84960]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}>SHORT {config.shortEnabled ? 'ON' : 'OFF'}</button>
-        </div>
+        <button
+          onClick={() => setIsBotSettingsExpanded(!isBotSettingsExpanded)}
+          className="w-full flex items-center justify-between text-[10px] font-black text-[#fcd535] uppercase tracking-widest border-b border-[#2b3139] pb-2 hover:text-white transition-colors"
+        >
+          <span>Bot Settings</span>
+          <span className={`transition-transform duration-300 ${isBotSettingsExpanded ? 'rotate-180' : ''}`}>▼</span>
+        </button>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-[#848e9c] uppercase">Risk / Trade (%)</label>
-            <input type="number" step="0.1" value={config.riskPerTrade} onChange={(e) => handleChange('riskPerTrade', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-          </div>
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-[#848e9c] uppercase">Leverage (X)</label>
-            <input type="number" value={config.leverage} onChange={(e) => handleChange('leverage', parseInt(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-[#848e9c] uppercase">Stop Loss (%)</label>
-            <input type="number" step="0.1" value={config.stopLossPercent} onChange={(e) => handleChange('stopLossPercent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-          </div>
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-[#848e9c] uppercase">TP 1 (%)</label>
-            <input type="number" step="0.1" value={config.tp1Percent} onChange={(e) => handleChange('tp1Percent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-[#848e9c] uppercase">TP 2 (%)</label>
-            <input type="number" step="0.1" value={config.tp2Percent} onChange={(e) => handleChange('tp2Percent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-          </div>
-          <div className="space-y-1">
-            <label className="text-[9px] font-black text-[#848e9c] uppercase">Max Trades</label>
-            <input type="number" value={config.maxConcurrentTrades} onChange={(e) => handleChange('maxConcurrentTrades', parseInt(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
-          </div>
-        </div>
-
-        <div className="mt-4 pt-2 border-t border-[#2b3139]">
-          <button 
-            onClick={() => setIsManualExpanded(!isManualExpanded)} 
-            className="w-full py-1 text-[9px] font-black text-[#848e9c] uppercase hover:text-white flex items-center justify-center gap-1"
-          >
-            {isManualExpanded ? '▲ HIDE MANUAL ENTRY' : '▼ SHOW MANUAL ENTRY'}
-          </button>
-          {isManualExpanded && (
-            <div className="mt-2 space-y-2">
-              <input 
-                type="text" 
-                placeholder="SYMBOL (E.G. SOL)" 
-                value={manualSymbol} 
-                onChange={(e) => setManualSymbol(e.target.value.toUpperCase())} 
-                className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1.5 text-[10px] font-black text-white uppercase outline-none focus:border-[#fcd535]"
-              />
-              <div className="grid grid-cols-2 gap-2">
-                <button 
-                  onClick={() => setManualSide('LONG')} 
-                  className={`py-1.5 rounded text-[9px] font-black border transition-all ${manualSide === 'LONG' ? 'bg-[#00c076] text-black border-[#00c076]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}
-                >
-                  LONG
-                </button>
-                <button 
-                  onClick={() => setManualSide('SHORT')} 
-                  className={`py-1.5 rounded text-[9px] font-black border transition-all ${manualSide === 'SHORT' ? 'bg-[#f84960] text-black border-[#f84960]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}
-                >
-                  SHORT
-                </button>
-              </div>
-              <button 
-                onClick={() => {
-                  if(!manualSymbol) return;
-                  onManualTrade({ 
-                    symbol: manualSymbol, 
-                    side: manualSide, 
-                    leverage: config.leverage, 
-                    riskValue: config.riskPerTrade, 
-                    sl: config.stopLossPercent, 
-                    tp1: config.tp1Percent, 
-                    tp2: config.tp2Percent 
-                  });
-                  setManualSymbol('');
-                }} 
-                className="w-full py-2 bg-[#fcd535] text-black rounded text-[10px] font-black uppercase hover:bg-white transition-all shadow-lg active:scale-95"
-              >
-                OPEN MANUAL POSITION
-              </button>
+        {isBotSettingsExpanded && (
+          <div className="space-y-3 animate-in slide-in-from-top-2 duration-300">
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => handleChange('longEnabled', !config.longEnabled)} className={`py-2 rounded text-[10px] font-black border transition-all ${config.longEnabled ? 'bg-[#00c076]/20 border-[#00c076] text-[#00c076]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}>LONG {config.longEnabled ? 'ON' : 'OFF'}</button>
+              <button onClick={() => handleChange('shortEnabled', !config.shortEnabled)} className={`py-2 rounded text-[10px] font-black border transition-all ${config.shortEnabled ? 'bg-[#f84960]/20 border-[#f84960] text-[#f84960]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}>SHORT {config.shortEnabled ? 'ON' : 'OFF'}</button>
             </div>
-          )}
-        </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-[#848e9c] uppercase">Risk / Trade (%)</label>
+                <input type="number" step="0.1" value={config.riskPerTrade} onChange={(e) => handleChange('riskPerTrade', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-[#848e9c] uppercase">Leverage (X)</label>
+                <input type="number" value={config.leverage} onChange={(e) => handleChange('leverage', parseInt(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-[#848e9c] uppercase">Stop Loss (%)</label>
+                <input type="number" step="0.1" value={config.stopLossPercent} onChange={(e) => handleChange('stopLossPercent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-[#848e9c] uppercase">TP 1 (%)</label>
+                <input type="number" step="0.1" value={config.tp1Percent} onChange={(e) => handleChange('tp1Percent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-[#848e9c] uppercase">TP 2 (%)</label>
+                <input type="number" step="0.1" value={config.tp2Percent} onChange={(e) => handleChange('tp2Percent', parseFloat(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-[#848e9c] uppercase">Max Trades</label>
+                <input type="number" value={config.maxConcurrentTrades} onChange={(e) => handleChange('maxConcurrentTrades', parseInt(e.target.value))} className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1 text-xs font-black text-white outline-none"/>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-2 border-t border-[#2b3139]">
+              <button 
+                onClick={() => setIsManualExpanded(!isManualExpanded)} 
+                className="w-full py-1 text-[9px] font-black text-[#848e9c] uppercase hover:text-white flex items-center justify-center gap-1 transition-colors"
+              >
+                <span className={`transition-transform duration-300 ${isManualExpanded ? 'rotate-180' : ''}`}>▼</span>
+                {isManualExpanded ? 'HIDE MANUAL ENTRY' : 'SHOW MANUAL ENTRY'}
+              </button>
+              {isManualExpanded && (
+                <div className="mt-2 space-y-2 animate-in slide-in-from-top-2 duration-300">
+                  <input 
+                    type="text" 
+                    placeholder="SYMBOL (E.G. SOL)" 
+                    value={manualSymbol} 
+                    onChange={(e) => setManualSymbol(e.target.value.toUpperCase())} 
+                    className="w-full bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1.5 text-[10px] font-black text-white uppercase outline-none focus:border-[#fcd535]"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <button 
+                      onClick={() => setManualSide('LONG')} 
+                      className={`py-1.5 rounded text-[9px] font-black border transition-all ${manualSide === 'LONG' ? 'bg-[#00c076] text-black border-[#00c076]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}
+                    >
+                      LONG
+                    </button>
+                    <button 
+                      onClick={() => setManualSide('SHORT')} 
+                      className={`py-1.5 rounded text-[9px] font-black border transition-all ${manualSide === 'SHORT' ? 'bg-[#f84960] text-black border-[#f84960]' : 'bg-[#0b0e11] border-[#2b3139] text-[#848e9c]'}`}
+                    >
+                      SHORT
+                    </button>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      if(!manualSymbol) return;
+                      onManualTrade({ 
+                        symbol: manualSymbol, 
+                        side: manualSide, 
+                        leverage: config.leverage, 
+                        riskValue: config.riskPerTrade, 
+                        sl: config.stopLossPercent, 
+                        tp1: config.tp1Percent, 
+                        tp2: config.tp2Percent 
+                      });
+                      setManualSymbol('');
+                    }} 
+                    className="w-full py-2 bg-[#fcd535] text-black rounded text-[10px] font-black uppercase hover:bg-white transition-all shadow-lg active:scale-95"
+                  >
+                    OPEN MANUAL POSITION
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* 🔧 YENİ: BLACKLIST YÖNETİMİ */}
+      {/* 🔧 COLLAPSIBLE: BLACKLIST */}
       <div className="space-y-2 bg-[#1e2329]/50 p-3 rounded-lg border border-[#2b3139]">
-        <div className="text-[9px] font-black text-[#fcd535] uppercase tracking-widest border-b border-[#2b3139] pb-2">
-          Blacklist ({config.blacklist.length})
-        </div>
+        <button
+          onClick={() => setIsBlacklistExpanded(!isBlacklistExpanded)}
+          className="w-full flex items-center justify-between text-[9px] font-black text-[#fcd535] uppercase tracking-widest border-b border-[#2b3139] pb-2 hover:text-white transition-colors"
+        >
+          <span>Blacklist ({config.blacklist.length})</span>
+          <span className={`transition-transform duration-300 ${isBlacklistExpanded ? 'rotate-180' : ''}`}>▼</span>
+        </button>
         
-        {/* Blacklist Items */}
-        <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
-          {config.blacklist.length === 0 ? (
-            <div className="text-center py-2 text-[#848e9c] text-[9px] font-bold opacity-50">
-              No blacklisted coins
+        {isBlacklistExpanded && (
+          <div className="space-y-2 animate-in slide-in-from-top-2 duration-300">
+            {/* Blacklist Items */}
+            <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+              {config.blacklist.length === 0 ? (
+                <div className="text-center py-2 text-[#848e9c] text-[9px] font-bold opacity-50">
+                  No blacklisted coins
+                </div>
+              ) : (
+                config.blacklist.map(symbol => (
+                  <div key={symbol} className="flex items-center justify-between bg-[#0b0e11] px-2 py-1.5 rounded border border-[#2b3139] hover:border-[#f84960]/50 transition-all group">
+                    <span className="text-[10px] font-black text-white uppercase">{symbol}</span>
+                    <button
+                      onClick={() => handleChange('blacklist', config.blacklist.filter(s => s !== symbol))}
+                      className="text-[#848e9c] hover:text-[#f84960] text-[11px] font-black opacity-0 group-hover:opacity-100 transition-all"
+                      title="Remove from blacklist"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
-          ) : (
-            config.blacklist.map(symbol => (
-              <div key={symbol} className="flex items-center justify-between bg-[#0b0e11] px-2 py-1.5 rounded border border-[#2b3139] hover:border-[#f84960]/50 transition-all group">
-                <span className="text-[10px] font-black text-white uppercase">{symbol}</span>
-                <button
-                  onClick={() => handleChange('blacklist', config.blacklist.filter(s => s !== symbol))}
-                  className="text-[#848e9c] hover:text-[#f84960] text-[11px] font-black opacity-0 group-hover:opacity-100 transition-all"
-                  title="Remove from blacklist"
-                >
-                  ✕
-                </button>
-              </div>
-            ))
-          )}
-        </div>
-        
-        {/* Add New */}
-        <div className="flex gap-2 pt-1">
-          <input
-            type="text"
-            placeholder="SYMBOL (e.g. DOGE)"
-            value={newBlacklistSymbol}
-            onChange={(e) => setNewBlacklistSymbol(e.target.value.toUpperCase().replace('USDT', ''))}
-            onKeyPress={(e) => {
-              if (e.key === 'Enter' && newBlacklistSymbol && !config.blacklist.includes(newBlacklistSymbol)) {
-                handleChange('blacklist', [...config.blacklist, newBlacklistSymbol]);
-                setNewBlacklistSymbol('');
-              }
-            }}
-            className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1.5 text-[10px] font-black text-white uppercase outline-none focus:border-[#fcd535] transition-all"
-          />
-          <button
-            onClick={() => {
-              if (newBlacklistSymbol && !config.blacklist.includes(newBlacklistSymbol)) {
-                handleChange('blacklist', [...config.blacklist, newBlacklistSymbol]);
-                setNewBlacklistSymbol('');
-              }
-            }}
-            className="bg-[#fcd535] text-black px-3 py-1.5 rounded text-[10px] font-black hover:bg-white transition-all shadow-md active:scale-95"
-          >
-            ADD
-          </button>
-        </div>
-        
-        <div className="text-[7px] text-[#848e9c] font-bold uppercase bg-black/20 rounded px-2 py-1 mt-1">
-          ⚠️ Blacklisted coins will be ignored for all signals
-        </div>
+            
+            {/* Add New */}
+            <div className="flex gap-2 pt-1">
+              <input
+                type="text"
+                placeholder="SYMBOL (e.g. DOGE)"
+                value={newBlacklistSymbol}
+                onChange={(e) => setNewBlacklistSymbol(e.target.value.toUpperCase().replace('USDT', ''))}
+                onKeyPress={(e) => {
+                  if (e.key === 'Enter' && newBlacklistSymbol && !config.blacklist.includes(newBlacklistSymbol)) {
+                    handleChange('blacklist', [...config.blacklist, newBlacklistSymbol]);
+                    setNewBlacklistSymbol('');
+                  }
+                }}
+                className="flex-1 bg-[#0b0e11] border border-[#2b3139] rounded px-2 py-1.5 text-[10px] font-black text-white uppercase outline-none focus:border-[#fcd535] transition-all"
+              />
+              <button
+                onClick={() => {
+                  if (newBlacklistSymbol && !config.blacklist.includes(newBlacklistSymbol)) {
+                    handleChange('blacklist', [...config.blacklist, newBlacklistSymbol]);
+                    setNewBlacklistSymbol('');
+                  }
+                }}
+                className="bg-[#fcd535] text-black px-3 py-1.5 rounded text-[10px] font-black hover:bg-white transition-all shadow-md active:scale-95"
+              >
+                ADD
+              </button>
+            </div>
+            
+            <div className="text-[7px] text-[#848e9c] font-bold uppercase bg-black/20 rounded px-2 py-1 mt-1">
+              ⚠️ Blacklisted coins will be ignored for all signals
+            </div>
+          </div>
+        )}
       </div>
 
       <button onClick={emergencyStop} className="w-full py-2 border border-[#f84960]/50 text-[#f84960] text-[9px] font-black uppercase rounded-lg hover:bg-[#f84960] hover:text-white transition-all">Emergency Liquidate All</button>
     </div>
   );
 };
+
 export default TradingControls;
